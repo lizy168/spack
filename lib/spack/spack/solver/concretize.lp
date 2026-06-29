@@ -2177,7 +2177,7 @@ build_priority(PackageNode, 0)   :- build(PackageNode), attr("node", PackageNode
 build_priority(PackageNode, 0)   :- concrete(PackageNode), attr("node", PackageNode).
 
 % This statement, which is a hidden feature of clingo, let us avoid cycles in the DAG
-#edge (A, B) : depends_on(A, B).
+#edge (A, B) : attr("depends_on", A, B, Type), Type != "run".
 
 %-----------------------------------------------------------------
 % Optimization to avoid errors
