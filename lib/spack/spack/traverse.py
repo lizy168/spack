@@ -44,7 +44,7 @@ class RootEdge(NamedTuple):
     propagation: PropagationPolicy = PropagationPolicy.NONE
 
 
-#: Type of edges yielded by traversals: artificial root in-edges and real dependency edges.
+#: Artificial root in-edges and real dependency edges yielded by traversals.
 EdgeType = Union["spack.spec.DependencySpec", RootEdge]
 
 
