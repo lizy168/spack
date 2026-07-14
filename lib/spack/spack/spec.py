@@ -2166,7 +2166,7 @@ class Spec:
     def traverse_edges(
         self,
         *,
-        root: bool = ...,
+        root: Literal[False],
         order: spack.traverse.OrderType = ...,
         cover: spack.traverse.CoverType = ...,
         direction: spack.traverse.DirectionType = ...,
@@ -2180,7 +2180,7 @@ class Spec:
     def traverse_edges(
         self,
         *,
-        root: bool = ...,
+        root: Literal[False],
         order: spack.traverse.OrderType = ...,
         cover: spack.traverse.CoverType = ...,
         direction: spack.traverse.DirectionType = ...,
@@ -2189,6 +2189,34 @@ class Spec:
         key: Callable[["Spec"], Any] = ...,
         visited: Optional[Set[Any]] = ...,
     ) -> Iterable[Tuple[int, DependencySpec]]: ...
+
+    @overload
+    def traverse_edges(
+        self,
+        *,
+        root: bool = ...,
+        order: spack.traverse.OrderType = ...,
+        cover: spack.traverse.CoverType = ...,
+        direction: spack.traverse.DirectionType = ...,
+        deptype: Union[dt.DepFlag, dt.DepTypes] = ...,
+        depth: Literal[False] = False,
+        key: Callable[["Spec"], Any] = ...,
+        visited: Optional[Set[Any]] = ...,
+    ) -> Iterable[spack.traverse.EdgeType]: ...
+
+    @overload
+    def traverse_edges(
+        self,
+        *,
+        root: bool = ...,
+        order: spack.traverse.OrderType = ...,
+        cover: spack.traverse.CoverType = ...,
+        direction: spack.traverse.DirectionType = ...,
+        deptype: Union[dt.DepFlag, dt.DepTypes] = ...,
+        depth: Literal[True],
+        key: Callable[["Spec"], Any] = ...,
+        visited: Optional[Set[Any]] = ...,
+    ) -> Iterable[Tuple[int, spack.traverse.EdgeType]]: ...
 
     def traverse_edges(
         self,
@@ -2201,7 +2229,7 @@ class Spec:
         depth: bool = False,
         key: Callable[["Spec"], Any] = id,
         visited: Optional[Set[Any]] = None,
-    ) -> Iterable[Union[DependencySpec, Tuple[int, DependencySpec]]]:
+    ) -> Iterable[Union[spack.traverse.EdgeType, Tuple[int, spack.traverse.EdgeType]]]:
         """Shorthand for :meth:`~spack.traverse.traverse_edges`"""
         return spack.traverse.traverse_edges(
             [self],
@@ -4859,8 +4887,8 @@ class Spec:
                 )
             )
 
-        def mask_build_deps(in_spec):
-            for edge in in_spec.traverse_edges(cover="edges"):
+        def mask_build_deps(in_spec: "Spec") -> None:
+            for edge in in_spec.traverse_edges(cover="edges", root=False):
                 edge.depflag &= ~dt.BUILD
 
         if transitive:
