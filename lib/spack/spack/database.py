@@ -1644,11 +1644,25 @@ class Database:
                 return []
             matching_hashes = {hash_key: matching_hashes[hash_key]}
 
+        # Expand virtuals in the query into provider-constrained alternatives, so that record
+        # matching below is a per-name lookup instead of a scan over all provider metadata.
+        named_alternatives: Dict[str, List["spack.spec.Spec"]] = {}
+        anonymous_alternatives: List["spack.spec.Spec"] = []
+        expanded = False
+        if query_spec is not None and not query_spec.concrete:
+            alternatives = spack.repo.expand_virtuals(query_spec)
+            expanded = len(alternatives) != 1 or alternatives[0] is not query_spec
+            for alt in alternatives if expanded else []:
+                if alt.name:
+                    named_alternatives.setdefault(alt.name, []).append(alt)
+                else:
+                    anonymous_alternatives.append(alt)
+
         results = []
+        virtual_results = []
         start_date = start_date or datetime.datetime.min
         end_date = end_date or datetime.datetime.max
 
-        deferred = []
         for rec in matching_hashes.values():
             if origin and not (origin == rec.origin):
                 continue
@@ -1674,29 +1688,29 @@ class Database:
                 results.append(rec.spec)
                 continue
 
-            # check anon specs and exact name matches first
-            if not query_spec.name or rec.spec.name == query_spec.name:
-                if rec.spec.satisfies(query_spec):
-                    results.append(rec.spec)
+            if not expanded:
+                # check anon specs and exact name matches
+                if not query_spec.name or rec.spec.name == query_spec.name:
+                    if rec.spec.satisfies(query_spec):
+                        results.append(rec.spec)
+                continue
 
-            # save potential virtual matches for later, but not if we already found a match
-            elif not results:
-                deferred.append(rec.spec)
+            # an installation matching the query name directly takes precedence over providers
+            if rec.spec.name == query_spec.name and rec.spec.satisfies(query_spec):
+                results.append(rec.spec)
+                continue
 
-        # Checking for virtuals is expensive, so we save it for last and only if needed.
-        # If we get here, we didn't find anything in the DB that matched by name.
-        # If we did fine something, the query spec can't be virtual b/c we matched an actual
-        # package installation, so skip the virtual check entirely. If we *didn't* find anything,
-        # check all the deferred specs *if* the query is virtual.
-        if (
-            not results
-            and query_spec is not None
-            and deferred
-            and spack.repo.PATH.is_virtual(query_spec.name)
-        ):
-            results = [spec for spec in deferred if spec.satisfies(query_spec)]
+            if anonymous_alternatives:
+                candidates = anonymous_alternatives
+            else:
+                candidates = named_alternatives.get(rec.spec.name, [])
 
-        return results
+            for alternative in candidates:
+                if rec.spec.satisfies(alternative):
+                    virtual_results.append(rec.spec)
+                    break
+
+        return results if results else virtual_results
 
     def query_local(
         self,

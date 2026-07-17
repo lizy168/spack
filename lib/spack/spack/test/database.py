@@ -934,6 +934,22 @@ def test_query_virtual_spec(database):
     assert all(name in names for name in ["mpich", "mpich2", "zmpi"])
 
 
+def test_query_virtual_with_versions(database):
+    """The version on a virtual query selects providers through their when-clauses."""
+    assert {s.name for s in database.query("mpi@3")} == {"mpich", "zmpi"}
+    assert database.query("mpi@=99.99") == []
+
+
+def test_query_virtual_in_dependency_position(database):
+    # bare virtual dependencies match through edge virtuals
+    assert len(database.query("mpileaks ^mpi")) == 3
+    # constrained virtual dependencies are expanded into providers
+    assert {s["mpi"].name for s in database.query("mpileaks ^mpi@3")} == {"mpich", "zmpi"}
+    # anonymous query with a constrained virtual dependency
+    assert {s.name for s in database.query("^mpi@3")} == {"mpileaks", "callpath"}
+    assert len(database.query("^mpi@3")) == 4
+
+
 def test_failed_spec_path_error(mutable_database):
     """Ensure spec not concrete check is covered."""
     s = spack.spec.Spec("pkg-a")
