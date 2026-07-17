@@ -15,6 +15,7 @@ import spack.environment as ev
 import spack.main
 import spack.modules.error
 import spack.modules.lmod
+import spack.repo
 import spack.spec
 import spack.util.environment
 
@@ -506,7 +507,7 @@ class TestLmod:
         with open(writer.layout.filename, encoding="utf-8") as f:
             depends_statements = [line.strip() for line in f.readlines() if "depends_on" in line]
             for dep in spec.dependencies(deptype=("link", "run")):
-                if dep.satisfies("mpi"):
+                if spack.repo.query_matches(dep, "mpi"):
                     assert not any(dep.dag_hash(7) in line for line in depends_statements)
                 else:
                     assert any(dep.dag_hash(7) in line for line in depends_statements)

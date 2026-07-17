@@ -498,9 +498,6 @@ class TestSpecSemantics:
             ("mpileaks^mpich@2.0^callpath@1.7", "^mpich@1:3^callpath@1.4:1.6"),
             ("mpileaks^mpich@4.0^callpath@1.7", "^mpich@1:3^callpath@1.4:1.6"),
             ("mpileaks^mpi@3", "^mpi@1.2:1.6"),
-            ("mpileaks^mpi@3:", "^mpich2@1.4"),
-            ("mpileaks^mpi@3:", "^mpich2"),
-            ("mpileaks^mpi@3:", "^mpich@1.0"),
             ("mpich~foo", "mpich+foo"),
             ("mpich+foo", "mpich~foo"),
             ("mpich foo=True", "mpich foo=False"),
@@ -634,9 +631,10 @@ class TestSpecSemantics:
         assert concrete.satisfies("mpileaks")
         assert not concrete.satisfies("zlib")
 
-        # Virtuals on a direct edge
+        # Virtuals on a direct edge. Edges only record virtual names, so a version constraint
+        # on the virtual is never satisfied; call sites expand it into providers instead.
         assert concrete.satisfies("%mpi")
-        assert concrete.satisfies("%mpi@3")
+        assert not concrete.satisfies("%mpi@3")
         assert not concrete.satisfies("%mpi@5")
         assert concrete.satisfies("%mpi=mpich")
         assert not concrete.satisfies("%lapack")
@@ -646,10 +644,11 @@ class TestSpecSemantics:
         assert concrete.satisfies("^mpi=mpich")
         assert not concrete.satisfies("^lapack")
 
-        # Concrete spec asking about one of its concrete deps.
+        # Concrete spec asking about one of its concrete deps. A provider does not satisfy the
+        # virtual name at the node level: names must match.
         mpich = concrete["mpich"]
         assert mpich.satisfies("mpich")
-        assert mpich.satisfies("mpi")
+        assert not mpich.satisfies("mpi")
 
         # We should not create again the index
         assert spack.repo.PATH._provider_index is None
@@ -803,9 +802,18 @@ class TestSpecSemantics:
             assert t.satisfies(s)
 
     def test_intersects_virtual(self):
-        assert Spec("mpich").intersects(Spec("mpi"))
-        assert Spec("mpich2").intersects(Spec("mpi"))
-        assert Spec("zmpi").intersects(Spec("mpi"))
+        """Specs with different names do not intersect, even if one could provide the other.
+        This keeps the invariant that intersecting specs can constrain each other, and virtual
+        queries are expanded into providers at the call site via spack.repo.expand_virtuals."""
+        assert not Spec("mpich").intersects(Spec("mpi"))
+        assert not Spec("mpich2").intersects(Spec("mpi"))
+        assert not Spec("zmpi").intersects(Spec("mpi"))
+
+        # if intersects is False, constrain raises
+        with pytest.raises(UnsatisfiableSpecError):
+            Spec("mpich").constrain(Spec("mpi"))
+        with pytest.raises(UnsatisfiableSpecError):
+            Spec("mpi").constrain(Spec("lapack"))
 
     def test_intersects_virtual_providers(self):
         """Tests that we can always intersect virtual providers from abstract specs.
@@ -1953,8 +1961,8 @@ def test_abstract_contains_semantic(lhs, rhs, expected, mock_packages):
         (Spec, "cppflags=-foo", "cflags=-foo", (True, False, False)),
         # Versions
         (Spec, "@0.94h", "@:0.94i", (True, True, False)),
-        # Different virtuals intersect if there is at least package providing both
-        (Spec, "mpi", "lapack", (True, False, False)),
+        # Different virtuals do not intersect, even if a package provides both
+        (Spec, "mpi", "lapack", (False, False, False)),
         (Spec, "mpi", "pkgconfig", (False, False, False)),
         # Intersection among target ranges for different architectures
         (Spec, "target=x86_64:", "target=ppc64le:", (False, False, False)),
@@ -2429,15 +2437,15 @@ def test_long_spec():
     ],
 )
 def test_constrain_symbolically(constraints, expected):
-    """Tests the semantics of constraining a spec when we don't resolve virtuals."""
+    """Tests that constrain is symbolic: it has no notion of virtuals."""
     merged = Spec()
     for c in constraints:
-        merged._constrain_symbolically(c)
+        merged.constrain(c)
     assert merged == Spec(expected)
 
     reverse_order = Spec()
     for c in reversed(constraints):
-        reverse_order._constrain_symbolically(c)
+        reverse_order.constrain(c)
     assert reverse_order == Spec(expected)
 
 

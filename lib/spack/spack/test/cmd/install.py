@@ -25,6 +25,7 @@ import spack.hash_types as ht
 import spack.hooks.sbom_generate
 import spack.old_installer
 import spack.package_base
+import spack.repo
 import spack.reporters.cdash
 import spack.store
 import spack.util.filesystem as fs
@@ -836,7 +837,7 @@ def test_install_no_add_in_env(
             a_spec = e_spec
         elif e_spec.name == "pkg-b":
             b_spec = e_spec
-        elif e_spec.satisfies(Spec("mpi")):
+        elif spack.repo.query_matches(e_spec, "mpi"):
             mpi_spec = e_spec
 
     assert a_spec

@@ -482,7 +482,7 @@ def test_010_all_install_sanity(database):
     # Query specs with multiple configurations
     mpileaks_specs = [s for s in all_specs if s.satisfies("mpileaks")]
     callpath_specs = [s for s in all_specs if s.satisfies("callpath")]
-    mpi_specs = [s for s in all_specs if s.satisfies("mpi")]
+    mpi_specs = [s for s in all_specs if spack.repo.query_matches(s, "mpi")]
 
     assert len(mpileaks_specs) == 3
     assert len(callpath_specs) == 3

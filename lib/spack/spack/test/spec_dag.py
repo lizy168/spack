@@ -907,7 +907,7 @@ class TestSpecDag:
         edges = mpileaks.edges_to_dependencies(**query)
         assert len(edges) == expected_length
         for constraint in expected_satisfies:
-            assert any(x.spec.satisfies(constraint) for x in edges)
+            assert any(spack.repo.query_matches(x.spec, constraint) for x in edges)
 
     def test_query_dependents_edges(self):
         """Tests querying edges from dependents"""

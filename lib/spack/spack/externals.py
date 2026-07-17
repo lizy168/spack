@@ -274,11 +274,15 @@ class ExternalSpecsParser:
                     # Infer the deptype if only '%' was used in the spec
                     inferred_virtuals = []
                     for name, current_flag in deptypes_by_package.items():
-                        if not dependency_node.intersects(name):
-                            continue
-                        depflag |= current_flag
                         if spack.repo.PATH.is_virtual(name):
-                            inferred_virtuals.append(name)
+                            # the dependency node may be a provider of this virtual
+                            for provider in spack.repo.expand_virtuals(name):
+                                if dependency_node.intersects(provider):
+                                    depflag |= current_flag
+                                    inferred_virtuals.append(name)
+                                    break
+                        elif dependency_node.intersects(name):
+                            depflag |= current_flag
                     virtuals = tuple(inferred_virtuals)
                 elif depflag == spack.deptypes.NONE:
                     depflag = spack.deptypes.DEFAULT

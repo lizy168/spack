@@ -302,7 +302,7 @@ def test_env_add_virtual():
 
     assert len(e.concretized_roots) == 1
     spec = e.specs_by_hash[e.concretized_roots[0].hash]
-    assert spec.intersects("mpi")
+    assert spack.repo.query_matches(spec, "mpi")
 
 
 def test_env_add_nonexistent_fails():

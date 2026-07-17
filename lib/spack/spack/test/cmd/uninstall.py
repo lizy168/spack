@@ -7,6 +7,7 @@ import pytest
 
 import spack.cmd.uninstall
 import spack.environment
+import spack.repo
 import spack.store
 from spack.enums import InstallRecordStatus
 from spack.main import SpackCommand, SpackCommandError
@@ -83,7 +84,7 @@ def test_recursive_uninstall(mutable_database):
     all_specs = spack.store.STORE.layout.all_specs()
     mpileaks_specs = [s for s in all_specs if s.satisfies("mpileaks")]
     callpath_specs = [s for s in all_specs if s.satisfies("callpath")]
-    mpi_specs = [s for s in all_specs if s.satisfies("mpi")]
+    mpi_specs = [s for s in all_specs if spack.repo.query_matches(s, "mpi")]
 
     assert len(mpileaks_specs) == 0
     assert len(callpath_specs) == 0
@@ -167,7 +168,7 @@ def test_force_uninstall_and_reinstall_by_hash(mutable_database):
             all_specs,
             [s for s in all_specs if s.satisfies("mpileaks")],
             [s for s in all_specs if s.satisfies("callpath")],
-            [s for s in all_specs if s.satisfies("mpi")],
+            [s for s in all_specs if spack.repo.query_matches(s, "mpi")],
         )
 
     all_specs, mpileaks_specs, callpath_specs, mpi_specs = db_specs()

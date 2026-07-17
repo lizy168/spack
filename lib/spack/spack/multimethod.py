@@ -30,6 +30,7 @@ from typing import Optional, Union
 
 import spack.directives_meta
 import spack.error
+import spack.repo
 import spack.spec
 
 
@@ -116,7 +117,8 @@ class SpecMultiMethod:
         given spec, if one exists
         """
         for condition, method in self.method_list:
-            if spec.satisfies(condition):
+            # @when conditions may constrain virtuals (e.g. ^mpi@3), which requires expansion
+            if spack.repo.query_matches(spec, condition):
                 return method
         return self.default or None
 

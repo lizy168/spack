@@ -1975,7 +1975,7 @@ spack:
                 concrete_specs.update(s.traverse())
 
         for matching_spec, expected_count in checks.items():
-            matches = [x for x in concrete_specs if x.satisfies(matching_spec)]
+            matches = [x for x in concrete_specs if spack.repo.query_matches(x, matching_spec)]
             assert len(matches) == expected_count
 
     @pytest.mark.parametrize(
