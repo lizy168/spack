@@ -1021,3 +1021,95 @@ def test_unknownpkgerror_match_fails():
 def test_unknownpkgerror_str_repo():
     """Ensure reasonable error message when repo is a string."""
     assert "not found in repository" in str(spack.repo.UnknownPackageError("pkg_a", "my_repo"))
+
+
+def test_expand_virtuals_non_virtual_identity(mock_packages):
+    """A query without virtuals in need of expansion is returned as the only alternative."""
+    query = spack.spec.Spec("mpileaks@2.3")
+    result = spack.repo.expand_virtuals(query)
+    assert len(result) == 1 and result[0] is query
+
+    # A bare virtual in dependency position matches statelessly via edge virtuals.
+    query = spack.spec.Spec("mpileaks ^mpi")
+    result = spack.repo.expand_virtuals(query)
+    assert len(result) == 1 and result[0] is query
+
+
+def test_expand_virtuals_root(mock_packages):
+    alternatives = spack.repo.expand_virtuals("mpi")
+    names = {s.name for s in alternatives}
+    assert "mpi" not in names
+    assert {"mpich", "mpich2", "zmpi", "intel-parallel-studio"} <= names
+
+
+def test_expand_virtuals_versions(mock_packages):
+    """The virtual's versions select providers, whose when-clause constraints are applied."""
+    alternatives = spack.repo.expand_virtuals(spack.spec.Spec("mpi@3"))
+    names = {s.name for s in alternatives}
+    assert "mpich" in names and "zmpi" in names
+    assert "mpich2" not in names  # provides at most mpi@:2.2
+
+
+def test_expand_virtuals_transfers_attributes(mock_packages):
+    """Non-name attributes of the virtual node are constraints on each provider."""
+    alternatives = spack.repo.expand_virtuals(spack.spec.Spec("mpi+debug"))
+    assert alternatives
+    for alt in alternatives:
+        assert alt.satisfies(spack.spec.Spec("+debug"))
+
+
+def test_expand_virtuals_keeps_query_deps(mock_packages):
+    alternatives = spack.repo.expand_virtuals(spack.spec.Spec("mpi ^callpath@0.9"))
+    assert alternatives
+    for alt in alternatives:
+        assert alt.satisfies("^callpath@0.9")
+
+
+def test_expand_virtuals_dependency(mock_packages):
+    """Virtual dependency nodes constrained beyond their name are expanded too."""
+    alternatives = spack.repo.expand_virtuals(spack.spec.Spec("mpileaks ^mpi@3"))
+    dep_names = set()
+    for alt in alternatives:
+        assert alt.name == "mpileaks"
+        edges = alt.edges_to_dependencies()
+        assert len(edges) == 1
+        assert "mpi" in edges[0].virtuals
+        dep_names.add(edges[0].spec.name)
+    assert "mpi" not in dep_names
+    assert {"mpich", "zmpi"} <= dep_names
+    assert "mpich2" not in dep_names
+
+
+def test_expand_virtuals_direct_dependency(mock_packages):
+    alternatives = spack.repo.expand_virtuals(spack.spec.Spec("mpileaks %mpi@3"))
+    assert alternatives
+    for alt in alternatives:
+        edges = alt.edges_to_dependencies()
+        assert len(edges) == 1
+        assert edges[0].direct
+        assert "mpi" in edges[0].virtuals
+
+
+def test_expand_virtuals_contradicting_providers(mock_packages):
+    # conditional-provider provides v1 only when ~disable-v1, so it is dropped
+    alternatives = spack.repo.expand_virtuals(spack.spec.Spec("v1+disable-v1"))
+    assert {s.name for s in alternatives} == {"v1-provider"}
+
+    # the only provider of unsatvdep requires +foo
+    assert spack.repo.expand_virtuals(spack.spec.Spec("unsatvdep~foo")) == []
+
+
+def test_query_matches(mock_packages):
+    Spec = spack.spec.Spec
+    assert spack.repo.query_matches(Spec("mpich@3.0.4"), "mpi@3")
+    assert not spack.repo.query_matches(Spec("mpich@1.0"), "mpi@3")
+    assert spack.repo.query_matches(Spec("mpich2@1.5"), "mpi@2.2")
+    assert not spack.repo.query_matches(Spec("mpich2@1.0"), "mpi@2.2")
+    assert spack.repo.query_matches(Spec("zmpi"), "mpi")
+    assert not spack.repo.query_matches(Spec("mpileaks"), "mpi")
+    # a literal name match takes precedence over provider expansion: bar is a virtual in the
+    # mock repo, but a spec named bar still matches the query bar
+    assert spack.repo.query_matches(Spec("bar"), "bar")
+    # non-virtual queries fall back to plain satisfies
+    assert spack.repo.query_matches(Spec("mpileaks@2.3"), "mpileaks")
+    assert not spack.repo.query_matches(Spec("mpileaks@2.3"), "callpath")

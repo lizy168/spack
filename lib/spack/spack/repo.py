@@ -2132,6 +2132,146 @@ def all_package_names(include_virtuals=False):
     return PATH.all_package_names(include_virtuals)
 
 
+def _is_expandable_virtual(node: "spack.spec.Spec", repo: Union[Repo, RepoPath]) -> bool:
+    """A dependency node needs expansion if it is virtual and constrained beyond its name;
+    a bare virtual name matches statelessly through edge virtuals."""
+    import spack.version
+
+    if not node.name or not repo.is_virtual(node.name):
+        return False
+    return bool(
+        node.versions != spack.version.any_version
+        or node.variants
+        or node.architecture
+        or node.compiler_flags
+        or node.abstract_hash
+    )
+
+
+def _substitute_provider(
+    node: "spack.spec.Spec", provider: "spack.spec.Spec"
+) -> "spack.spec.Spec":
+    """Return a copy of the virtual ``node`` (including its dependencies) renamed to
+    ``provider`` and constrained with it. The virtual's versions are dropped: they select
+    providers, they do not constrain the provider's own versions.
+
+    Raises:
+        spack.error.UnsatisfiableSpecError: if the node contradicts the provider
+    """
+    import spack.version
+
+    result = node.copy()
+    result.name = provider.name
+    result.namespace = None
+    result.versions = spack.version.any_version.copy()
+    result.constrain(provider)
+    return result
+
+
+def expand_virtuals(
+    query: Union[str, "spack.spec.Spec"], repository: Optional[Union[Repo, RepoPath]] = None
+) -> List["spack.spec.Spec"]:
+    """Expand virtual names in an abstract query spec into provider-constrained alternatives.
+
+    A spec matches the query if and only if it satisfies at least one of the returned
+    alternatives. A virtual root and any virtual dependency node constrained beyond its name
+    are replaced by their providers, each constrained with the non-name attributes of the
+    virtual node; the virtual's versions select providers via their when-clauses. Edges to
+    expanded dependency nodes are annotated with the virtual name.
+
+    Returns the query itself as the only alternative when there is nothing to expand, and an
+    empty list when a virtual in the query has no matching provider.
+    """
+    import spack.error
+    import spack.spec
+
+    repo = repository if repository is not None else PATH
+    if isinstance(query, str):
+        query = spack.spec.Spec(query)
+
+    alternatives = [query]
+
+    if query.name and repo.is_virtual(query.name):
+        alternatives = []
+        for provider in _providers_or_empty(query, repo):
+            try:
+                alternatives.append(_substitute_provider(query, provider))
+            except spack.error.UnsatisfiableSpecError:
+                continue
+
+    virtual_deps = [d for d in query.traverse(root=False) if _is_expandable_virtual(d, repo)]
+
+    for node in virtual_deps:
+        providers = _providers_or_empty(node, repo)
+        expanded = []
+        for alternative in alternatives:
+            for provider in providers:
+                try:
+                    expanded.append(_replace_virtual_dep(alternative, node.name, provider))
+                except spack.error.UnsatisfiableSpecError:
+                    continue
+        alternatives = expanded
+
+    return alternatives
+
+
+def _providers_or_empty(
+    node: "spack.spec.Spec", repo: Union[Repo, RepoPath]
+) -> List["spack.spec.Spec"]:
+    try:
+        return repo.providers_for(node)
+    except UnknownPackageError:
+        return []
+
+
+def _replace_virtual_dep(
+    query: "spack.spec.Spec", name: str, provider: "spack.spec.Spec"
+) -> "spack.spec.Spec":
+    """Return a copy of ``query`` with every dependency node called ``name`` replaced by
+    ``provider``, annotating the incoming edges with the virtual name.
+
+    Raises:
+        spack.error.UnsatisfiableSpecError: if the node contradicts the provider
+    """
+    result = query.copy()
+    edges = [e for e in result.traverse_edges(root=False, cover="edges") if e.spec.name == name]
+    for edge in edges:
+        new_node = _substitute_provider(edge.spec, provider)
+        edge.parent._dependencies[name].remove(edge)
+        if not edge.parent._dependencies[name]:
+            del edge.parent._dependencies[name]
+        edge.parent._add_dependency(
+            new_node,
+            depflag=edge.depflag,
+            virtuals=edge.virtuals + (name,),
+            direct=edge.direct,
+            propagation=edge.propagation,
+            when=edge.when,
+        )
+    return result
+
+
+def query_matches(
+    spec: "spack.spec.Spec",
+    query: Union[str, "spack.spec.Spec"],
+    repository: Optional[Union[Repo, RepoPath]] = None,
+) -> bool:
+    """Return True if ``spec`` satisfies ``query`` with virtuals expanded into providers.
+
+    A literal match takes precedence: a spec named like the query matches even if the query
+    name happens to be virtual in the repository."""
+    import spack.spec
+
+    if isinstance(query, str):
+        query = spack.spec.Spec(query)
+    if spec.satisfies(query):
+        return True
+    for alternative in expand_virtuals(query, repository):
+        if spec.satisfies(alternative):
+            return True
+    return False
+
+
 @contextlib.contextmanager
 def use_repositories(
     *paths_and_repos: Union[str, Repo], override: bool = True
