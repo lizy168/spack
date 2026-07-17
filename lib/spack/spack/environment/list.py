@@ -4,6 +4,7 @@
 import itertools
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
+import spack.repo
 import spack.spec
 import spack.util.spack_yaml
 import spack.variant
@@ -157,7 +158,8 @@ def _expand_matrix_constraints(matrix_config):
             pass
 
         # Resolve abstract hashes for exclusion criteria
-        if any(spack.hash_lookup.lookup_hash(test_spec).satisfies(x) for x in excludes):
+        resolved_test_spec = spack.hash_lookup.lookup_hash(test_spec)
+        if any(spack.repo.query_matches(resolved_test_spec, x) for x in excludes):
             continue
 
         if sigil:

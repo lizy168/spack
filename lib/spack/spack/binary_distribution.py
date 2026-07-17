@@ -56,6 +56,7 @@ import spack.oci.oci
 import spack.oci.opener
 import spack.paths
 import spack.platforms
+import spack.repo
 import spack.spec
 import spack.stage
 import spack.store
@@ -2559,7 +2560,8 @@ class BinaryCacheQuery:
         Args:
             spec: The spec being searched for
         """
-        return [s for s in self.possible_specs if s.satisfies(spec)]
+        alternatives = [spec] + [a for a in spack.repo.expand_virtuals(spec) if a is not spec]
+        return [s for s in self.possible_specs if any(s.satisfies(a) for a in alternatives)]
 
 
 class FetchIndexError(Exception):

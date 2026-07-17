@@ -48,6 +48,7 @@ import spack.environment
 import spack.error
 import spack.paths
 import spack.projections as proj
+import spack.repo
 import spack.schema
 import spack.schema.environment
 import spack.spec
@@ -188,7 +189,7 @@ def merge_config_rules(configuration: dict, spec: spack.spec.Spec) -> dict:
     # appearance in the module file
     spec_configuration = copy.deepcopy(configuration.get("all", {}))
     for constraint, action in configuration.items():
-        if spec.satisfies(constraint):
+        if spack.repo.query_matches(spec, constraint):
             if hasattr(constraint, "override") and constraint.override:
                 spec_configuration = {}
             update_dictionary_extending_lists(spec_configuration, copy.deepcopy(action))
@@ -478,7 +479,7 @@ class BaseConfiguration:
         """
         suffixes = []
         for constraint, suffix in self.conf.get("suffixes", {}).items():
-            if self.spec.satisfies(constraint):
+            if spack.repo.query_matches(self.spec, constraint):
                 suffixes.append(suffix)
         suffixes = list(dedupe(suffixes))
         # For hidden modules we can always add a fixed length hash as suffix, since it guards
@@ -511,8 +512,8 @@ class BaseConfiguration:
         conf = self._config
 
         # Compute the list of matching include / exclude rules, and whether excluded as implicit
-        include_matches = [x for x in conf.get("include", []) if spec.satisfies(x)]
-        exclude_matches = [x for x in conf.get("exclude", []) if spec.satisfies(x)]
+        include_matches = [x for x in conf.get("include", []) if spack.repo.query_matches(spec, x)]
+        exclude_matches = [x for x in conf.get("exclude", []) if spack.repo.query_matches(spec, x)]
         excluded_as_implicit = not self.explicit and conf.get("exclude_implicits", False)
 
         def debug_info(line_header: str, match_list: List[str]) -> None:
@@ -656,12 +657,12 @@ class BaseConfiguration:
             return {}
 
         # If it's a core_spec, lie and say it requires a core compiler
-        if any(self.spec.satisfies(core_spec) for core_spec in self.core_specs):
+        if any(spack.repo.query_matches(self.spec, core_spec) for core_spec in self.core_specs):
             return {"compiler": self.core_compilers[0]}
 
         hierarchy_filter_list = []
         for spec, filter_list in self.filter_hierarchy_specs.items():
-            if self.spec.satisfies(spec):
+            if spack.repo.query_matches(self.spec, spec):
                 hierarchy_filter_list = filter_list
                 break
 
@@ -1359,7 +1360,7 @@ class BaseModuleFileWriter:
         self.update_module_hiddenness()
 
     def update_module_defaults(self) -> None:
-        if any(self.spec.satisfies(default) for default in self.conf.defaults):
+        if any(spack.repo.query_matches(self.spec, default) for default in self.conf.defaults):
             # This spec matches a default, it needs to be symlinked to default
             # Symlink to a tmp location first and move, so that existing
             # symlinks do not cause an error.
@@ -1433,7 +1434,7 @@ class BaseModuleFileWriter:
                 pass
 
     def remove_module_defaults(self) -> None:
-        if not any(self.spec.satisfies(default) for default in self.conf.defaults):
+        if not any(spack.repo.query_matches(self.spec, default) for default in self.conf.defaults):
             return
 
         # This spec matches a default, symlink needs to be removed as we remove the module

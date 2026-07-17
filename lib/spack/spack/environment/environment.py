@@ -708,10 +708,10 @@ class ViewDescriptor:
         self.groups: Optional[List[str]] = groups
 
     def select_fn(self, spec: Spec) -> bool:
-        return any(spec.satisfies(s) for s in self.select)
+        return any(spack.repo.query_matches(spec, s) for s in self.select)
 
     def exclude_fn(self, spec: Spec) -> bool:
-        return not any(spec.satisfies(e) for e in self.exclude)
+        return not any(spack.repo.query_matches(spec, e) for e in self.exclude)
 
     def update_root(self, new_path: str) -> None:
         self.raw_root = new_path
@@ -1523,7 +1523,11 @@ class Environment:
                 " specify a named list that is not a matrix"
             )
 
-        matches = [(idx, x) for idx, x in enumerate(list_to_change) if x.satisfies(match_spec)]
+        matches = [
+            (idx, x)
+            for idx, x in enumerate(list_to_change)
+            if spack.repo.query_matches(x, match_spec)
+        ]
         if len(matches) == 0:
             raise ValueError(
                 "There are no specs named {0} in {1}".format(match_spec.name, list_name)
@@ -1555,7 +1559,7 @@ class Environment:
             raise SpackEnvironmentError(msg) from e
 
         if not query_spec.concrete:
-            matches = [s for s in list_to_change if s.satisfies(query_spec)]
+            matches = [s for s in list_to_change if spack.repo.query_matches(s, query_spec)]
 
         else:
             # concrete specs match against concrete specs in the env by dag hash.
@@ -2187,10 +2191,13 @@ class Environment:
 
     def all_matching_specs(self, *specs: spack.spec.Spec) -> List[Spec]:
         """Returns all concretized specs in the environment satisfying any of the input specs"""
+        alternatives = list(specs)
+        for t in specs:
+            alternatives.extend(a for a in spack.repo.expand_virtuals(t) if a is not t)
         return [
             s
             for s in traverse.traverse_nodes(self.concrete_roots(), key=traverse.by_dag_hash)
-            if any(s.satisfies(t) for t in specs)
+            if any(s.satisfies(a) for a in alternatives)
         ]
 
     @spack.repo.autospec
@@ -2213,13 +2220,14 @@ class Environment:
         """
         env_root_to_user = {root.dag_hash(): user for user, root in self.concretized_specs()}
         root_matches, dep_matches = [], []
+        alternatives = [spec] + [a for a in spack.repo.expand_virtuals(spec) if a is not spec]
 
         for env_spec in traverse.traverse_nodes(
             specs=[root for _, root in self.concretized_specs()],
             key=traverse.by_dag_hash,
             order="breadth",
         ):
-            if not env_spec.satisfies(spec):
+            if not any(env_spec.satisfies(a) for a in alternatives):
                 continue
 
             # If the spec is concrete, then there is no possibility of multiple matches,
