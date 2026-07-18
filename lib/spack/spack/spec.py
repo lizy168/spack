@@ -2056,8 +2056,10 @@ class Spec:
     def package(self) -> "spack.package_base.PackageBase":
         if self._package is None:
             raise spack.error.SpecError(
-                f"spec {self.name} has no package instance attached; "
-                f"use spack.repo.PATH.get(spec) to attach one"
+                f"spec {self.name} has no package instance attached. Spack attaches package "
+                f"instances to specs after concretization and when entering the build process; "
+                f"hitting this error means the code that produced this spec failed to do so, "
+                f"which is likely a bug in Spack"
             )
         return self._package
 
@@ -4362,10 +4364,19 @@ class Spec:
                         _add_edge_to_map(new_dependencies, edge.spec.name, edge)
             spec._dependencies = new_dependencies
 
-    def _virtuals_provided(self, root):
-        """Return set of virtuals provided by self in the context of root"""
+    def _virtuals_provided(
+        self, root, root_virtuals: Optional[Dict[int, Set[str]]] = None
+    ) -> Set[str]:
+        """Return set of virtuals provided by self in the context of root.
+
+        A non-root node provides the virtuals annotated on its incoming edges. The root
+        could be using any virtual its package can provide, which requires an attached
+        package instance; root_virtuals can map a root's id to a precomputed set instead,
+        for roots that have no package instance attached, such as copies made during
+        splicing."""
         if root is self:
-            # Could be using any virtual the package can provide
+            if root_virtuals is not None and id(root) in root_virtuals:
+                return root_virtuals[id(root)]
             return {v.name for v in self.package.virtuals_provided}
 
         hashes = [s.dag_hash() for s in root.traverse()]
@@ -4374,12 +4385,13 @@ class Spec:
         )
         return set().union(*[edge.virtuals for edge in in_edges])
 
-    def _splice_match(self, other, self_root, other_root):
+    def _splice_match(self, other, self_root, other_root, root_virtuals=None):
         """Return True if other is a match for self in a splice of other_root into self_root
 
         Other is a splice match for self if it shares a name, or if self is a virtual provider
         and other provides a superset of the virtuals provided by self. Virtuals provided are
-        evaluated in the context of a root spec (self_root for self, other_root for other).
+        evaluated in the context of a root spec (self_root for self, other_root for other),
+        with the optional root_virtuals mapping forwarded to ``_virtuals_provided``.
 
         This is a slight oversimplification. Other could be a match for self in the context of
         one edge in self_root and not in the context of another edge. This method could be
@@ -4389,8 +4401,9 @@ class Spec:
             return True
 
         return bool(
-            bool(self._virtuals_provided(self_root))
-            and self._virtuals_provided(self_root) <= other._virtuals_provided(other_root)
+            bool(self._virtuals_provided(self_root, root_virtuals))
+            and self._virtuals_provided(self_root, root_virtuals)
+            <= other._virtuals_provided(other_root, root_virtuals)
         )
 
     def _splice_detach_and_add_dependents(self, replacement, context):
@@ -4426,7 +4439,7 @@ class Spec:
             self._dependents[edge.parent.name].remove(edge)
             edge.parent._add_dependency(replacement, depflag=edge.depflag, virtuals=edge.virtuals)
 
-    def _splice_helper(self, replacement):
+    def _splice_helper(self, replacement, root_virtuals=None):
         """Main loop of a transitive splice.
 
         The while loop around a traversal of self ensures that changes to self from previous
@@ -4439,12 +4452,8 @@ class Spec:
 
         Arguments:
             replacement: The node that will replace any equivalent node in self
-            self_root: The root of the spec that self comes from. This provides the context for
-                evaluating whether ``replacement`` is a match for each node of ``self``. See
-                ``Spec._splice_match`` and ``Spec._virtuals_provided`` for details.
-            other_root: The root of the spec that replacement comes from. This provides the context
-                for evaluating whether ``replacement`` is a match for each node of ``self``. See
-                ``Spec._splice_match`` and ``Spec._virtuals_provided`` for details.
+            root_virtuals: Maps the id of a root to the precomputed virtual names it
+                provides. See ``Spec._virtuals_provided`` for details.
         """
         ids = {id(s) for s in replacement.traverse()}
 
@@ -4452,7 +4461,7 @@ class Spec:
         replacements_by_name = collections.defaultdict(list)
         for node in replacement.traverse():
             replacements_by_name[node.name].append(node)
-            virtuals = node._virtuals_provided(root=replacement)
+            virtuals = node._virtuals_provided(replacement, root_virtuals)
             for virtual in virtuals:
                 replacements_by_name[virtual].append(node)
 
@@ -4472,11 +4481,11 @@ class Spec:
                 if not analogs:
                     # If we have to check for matching virtuals, then we need to check that it
                     # matches all virtuals. Use `_splice_match` to validate possible matches
-                    for virtual in node._virtuals_provided(root=self):
+                    for virtual in node._virtuals_provided(self, root_virtuals):
                         analogs += [
                             r
                             for r in replacements_by_name[virtual]
-                            if node._splice_match(r, self_root=self, other_root=replacement)
+                            if node._splice_match(r, self, replacement, root_virtuals)
                         ]
 
                     # No match, keep iterating over self
@@ -4543,11 +4552,18 @@ class Spec:
         assert self.concrete
         assert other.concrete
 
-        if self._splice_match(other, self_root=self, other_root=other):
+        # The virtuals the roots provide are computed up front and passed around by root id,
+        # since the copies made during splicing have no package instances attached.
+        root_virtuals = {
+            id(self): self._virtuals_provided(self),
+            id(other): other._virtuals_provided(other),
+        }
+
+        if self._splice_match(other, self, other, root_virtuals):
             return other.copy()
 
         if not any(
-            node._splice_match(other, self_root=self, other_root=other)
+            node._splice_match(other, self, other, root_virtuals)
             for node in self.traverse(root=False, deptype=dt.LINK | dt.RUN)
         ):
             other_str = other.format("{name}/{hash:7}")
@@ -4560,12 +4576,8 @@ class Spec:
         # Copies of all non-build deps, build deps will get added at the end
         spec = self.copy(deps=dt.ALL & ~dt.BUILD)
         replacement = other.copy(deps=dt.ALL & ~dt.BUILD)
-
-        # Lend the package instances of the original roots to the copies; they are needed
-        # by _virtuals_provided and dropped again before returning, since the copies are
-        # modified in the process of splicing.
-        spec._package = self._package
-        replacement._package = other._package
+        root_virtuals[id(spec)] = root_virtuals[id(self)]
+        root_virtuals[id(replacement)] = root_virtuals[id(other)]
 
         def make_node_pairs(orig_spec, copied_spec):
             return list(
@@ -4590,17 +4602,17 @@ class Spec:
 
             # Transitively splice any relevant nodes from new into base
             # This handles all shared dependencies between self and other
-            spec._splice_helper(replacement)
+            spec._splice_helper(replacement, root_virtuals)
         else:
             # Do the same thing as the transitive splice, but reversed
             node_pairs = make_node_pairs(other, replacement)
             mask_build_deps(replacement)
-            replacement._splice_helper(spec)
+            replacement._splice_helper(spec, root_virtuals)
 
             # Intransitively splice replacement into spec
             # This is very simple now that all shared dependencies have been handled
             for node in spec.traverse(order="topo", deptype=dt.LINK | dt.RUN):
-                if node._splice_match(other, self_root=spec, other_root=other):
+                if node._splice_match(other, spec, other, root_virtuals):
                     node._splice_detach_and_add_dependents(replacement, context=spec)
 
         # For nodes that were spliced, modify the build spec to ensure build deps are preserved
@@ -4612,7 +4624,6 @@ class Spec:
                 for edge in orig.edges_to_dependencies(depflag=dt.BUILD):
                     copy._add_dependency(edge.spec, depflag=dt.BUILD, virtuals=edge.virtuals)
 
-        spec._package = replacement._package = None
         return spec
 
     def mutate(self, mutator, rehash=True) -> bool:

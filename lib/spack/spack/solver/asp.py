@@ -3880,14 +3880,11 @@ def post_process_concretization_result(specs: SpecDict) -> None:
                     spack.version.git_ref_lookup.GitRefLookup(spec.fullname)
                 )
 
-    # attach package instances after hash unification and before splicing, which requires them
-    spack.repo.attach_packages(specs.values())
-
     new_specs = execute_explicit_splices(specs)
     specs.clear()
     specs.update(new_specs)
 
-    # splice results are fresh copies without package instances, so attach again
+    # attach a package instance to every node of the concretized specs
     spack.repo.attach_packages(specs.values())
 
     # Resolve patch objects for all nodes, making Spec.patches available
@@ -3924,11 +3921,10 @@ def execute_explicit_splices(specs: SpecDict) -> SpecDict:
                 # The first iteration, we need to replace the abstract hash
                 if not replacement.concrete:
                     spack.hash_lookup.replace_hash(replacement)
-                    spack.repo.attach_packages([replacement])
+                # splicing consults the virtuals provided by the two roots
+                spack.repo.PATH.get(current_spec)
+                spack.repo.PATH.get(replacement)
                 current_spec = current_spec.splice(replacement, transitive)
-                # splicing drops package instances of modified nodes, reattach for
-                # further splices that need them
-                spack.repo.attach_packages([current_spec])
         new_key = NodeId(id=key.id, pkg=current_spec.name)
         new_specs[new_key] = current_spec
 

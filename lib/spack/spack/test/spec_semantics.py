@@ -60,11 +60,11 @@ def setup_complex_splice(monkeypatch):
     to avoid needing package files for each spec.
     """
 
-    def splice_match(self, other, self_root, other_root):
+    def splice_match(self, other, self_root, other_root, root_virtuals=None):
         return self.name == other.name
 
-    def virtuals_provided(self, root):
-        return []
+    def virtuals_provided(self, root, root_virtuals=None):
+        return set()
 
     monkeypatch.setattr(Spec, "_splice_match", splice_match)
     monkeypatch.setattr(Spec, "_virtuals_provided", virtuals_provided)

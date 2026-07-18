@@ -43,6 +43,7 @@ from typing import (
 import spack
 import spack.caches
 import spack.config
+import spack.deptypes as dt
 import spack.error
 import spack.patch
 import spack.paths
@@ -59,6 +60,9 @@ import spack.util.lock
 import spack.util.naming as nm
 import spack.util.path
 import spack.util.spack_yaml as syaml
+import spack.util.string
+import spack.variant as vt
+import spack.version
 from spack.spec import SPECFILE_FORMAT_VERSION, Spec
 from spack.util import tty
 from spack.util.filesystem import working_dir
@@ -956,8 +960,13 @@ class RepoPath:
         return selected
 
     def get(self, spec: spack.spec.Spec) -> "spack.package_base.PackageBase":
-        """Returns the package associated with the supplied spec, attaching it to the
-        spec if it does not have one yet."""
+        """Returns the package associated with the supplied spec.
+
+        The instance is memoized on the spec node, so repeated calls return the same
+        object. This preserves instance identity for stateful attributes like the stage,
+        and mirrors the caching the old lazy Spec.package property did. Consequently, a
+        previously attached instance is returned as is, even if it was created by a
+        different repository."""
         msg = "RepoPath.get can only be called on concrete specs"
         assert isinstance(spec, Spec) and spec.concrete, msg
         if spec._package is None:
@@ -2127,17 +2136,21 @@ def all_package_names(include_virtuals=False):
 def attach_packages(
     specs: Iterable[spack.spec.Spec], repository: Optional[Union[Repo, RepoPath]] = None
 ) -> None:
-    """Attach a package instance to every node of the given concrete specs."""
+    """Attach a package instance to every node of the given concrete specs.
+
+    Code that hands a concrete spec DAG to package code must call this, since package
+    code can reach any node of the DAG (for example through spec["dep"]) and expects a
+    package instance there. The call is idempotent: nodes that already have an instance
+    keep it."""
     repo = repository or PATH
     for spec in spack.traverse.traverse_nodes(list(specs), key=id):
-        repo.get(spec)
+        if spec._package is None:
+            spec._package = repo.get(spec)
 
 
 def _is_expandable_virtual(node: spack.spec.Spec, repo: Union[Repo, RepoPath]) -> bool:
     """A dependency node needs expansion if it is virtual and constrained beyond its name;
     a bare virtual name matches statelessly through edge virtuals."""
-    import spack.version
-
     if not node.name or not repo.is_virtual(node.name):
         return False
     return bool(
@@ -2157,8 +2170,6 @@ def _substitute_provider(node: spack.spec.Spec, provider: spack.spec.Spec) -> sp
     Raises:
         spack.error.UnsatisfiableSpecError: if the node contradicts the provider
     """
-    import spack.version
-
     result = node.copy()
     result.name = provider.name
     result.namespace = None
@@ -2181,8 +2192,6 @@ def expand_virtuals(
     Returns the query itself as the only alternative when there is nothing to expand, and an
     empty list when a virtual in the query has no matching provider.
     """
-    import spack.error
-
     repo = repository if repository is not None else PATH
     if isinstance(query, str):
         query = spack.spec.Spec(query)
@@ -2301,8 +2310,6 @@ def ensure_valid_variants(spec: spack.spec.Spec) -> None:
     Raises:
         spack.variant.UnknownVariantError: on the first unknown variant found
     """
-    import spack.variant as vt
-
     # concrete variants are always valid
     if spec.concrete:
         return
@@ -2332,9 +2339,6 @@ def substitute_abstract_variants(spec: spack.spec.Spec) -> None:
     Args:
         spec: spec on which to operate the substitution
     """
-    import spack.util.string
-    import spack.variant as vt
-
     # This method needs to be best effort so that it works in matrix exclusion
     # in $spack/lib/spack/spack/spec_list.py
     unknown = []
@@ -2412,9 +2416,6 @@ def get_patches(spec: spack.spec.Spec) -> List["spack.patch.Patch"]:
 def inject_patches_variant(root: spack.spec.Spec) -> None:
     """Inject any patches from the packages into the ``patches`` variant of the specs
     in the given DAG, before it is marked concrete."""
-    import spack.deptypes as dt
-    import spack.variant as vt
-
     # This dictionary will store object IDs rather than Specs as keys
     # since the Spec __hash__ will change as patches are added to them
     spec_to_patches: Dict[int, Set[spack.patch.Patch]] = {}

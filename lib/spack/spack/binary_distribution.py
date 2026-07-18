@@ -1933,8 +1933,9 @@ def relocate_package(spec: spack.spec.Spec) -> None:
     # that s replaced when we spliced.
     relocation_specs = specs_to_relocate(spec)
     build_spec_ids = {id(s) for s in spec.build_spec.traverse(deptype=dt.ALL & ~dt.BUILD)}
-    # splice matching requires package instances on the roots
-    spack.repo.attach_packages([spec, spec.build_spec])
+    # splice matching consults the virtuals provided by the two roots
+    spack.repo.PATH.get(spec)
+    spack.repo.PATH.get(spec.build_spec)
     for s in relocation_specs:
         analog = s
         if id(s) not in build_spec_ids:
