@@ -715,6 +715,8 @@ def _read_specs_and_push_index(
             finally:
                 if cache_entry:
                     cache_entry.destroy()
+            if fetched_spec.original_spec_format() < 3:
+                spack.repo.reconstruct_virtuals_on_edges(fetched_spec)
             db.add(fetched_spec)
             db.mark(fetched_spec, "in_buildcache", True)
 
@@ -1629,6 +1631,8 @@ def _oci_update_index(
 
     for spec_dict in spec_dicts:
         spec = spack.spec.Spec.from_dict(spec_dict)
+        if spec.original_spec_format() < 3:
+            spack.repo.reconstruct_virtuals_on_edges(spec)
         db.add(spec)
         db.mark(spec, "in_buildcache", True)
 
@@ -2210,6 +2214,8 @@ def try_direct_fetch(spec: spack.spec.Spec) -> List[MirrorMetadata]:
             # to mark this spec concrete on read-in.
             fetched_spec = spack.spec.Spec.from_dict(spec_dict)
             fetched_spec._mark_concrete()
+            if fetched_spec.original_spec_format() < 3:
+                spack.repo.reconstruct_virtuals_on_edges(fetched_spec)
 
             found_specs.append(MirrorMetadata(mirror.fetch_url, layout_version, mirror.fetch_view))
 
