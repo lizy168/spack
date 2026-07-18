@@ -60,6 +60,7 @@ import platform
 import re
 import socket
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -88,7 +89,6 @@ import spack.error
 import spack.hash_types as ht
 import spack.paths
 import spack.platforms
-import spack.repo
 import spack.spec_parser
 import spack.traverse
 import spack.util.filesystem as fs
@@ -107,6 +107,9 @@ import spack.version.git_ref_lookup
 from spack.util import lang, tty
 
 from .enums import PropagationPolicy
+
+if TYPE_CHECKING:
+    import spack.package_base
 
 __all__ = [
     "CompilerSpec",
@@ -2050,12 +2053,12 @@ class Spec:
         return edges_by_package[0].parent.root
 
     @property
-    def package(self):
-        assert self.concrete, "{0}: Spec.package can only be called on concrete specs".format(
-            self.name
-        )
-        if not self._package:
-            self._package = spack.repo.PATH.get(self)
+    def package(self) -> "spack.package_base.PackageBase":
+        if self._package is None:
+            raise spack.error.SpecError(
+                f"spec {self.name} has no package instance attached; "
+                f"use spack.repo.PATH.get(spec) to attach one"
+            )
         return self._package
 
     @property
@@ -4558,6 +4561,12 @@ class Spec:
         spec = self.copy(deps=dt.ALL & ~dt.BUILD)
         replacement = other.copy(deps=dt.ALL & ~dt.BUILD)
 
+        # Lend the package instances of the original roots to the copies; they are needed
+        # by _virtuals_provided and dropped again before returning, since the copies are
+        # modified in the process of splicing.
+        spec._package = self._package
+        replacement._package = other._package
+
         def make_node_pairs(orig_spec, copied_spec):
             return list(
                 zip(
@@ -4603,6 +4612,7 @@ class Spec:
                 for edge in orig.edges_to_dependencies(depflag=dt.BUILD):
                     copy._add_dependency(edge.spec, depflag=dt.BUILD, virtuals=edge.virtuals)
 
+        spec._package = replacement._package = None
         return spec
 
     def mutate(self, mutator, rehash=True) -> bool:

@@ -27,6 +27,7 @@ from typing import (
     Callable,
     Dict,
     Generator,
+    Iterable,
     Iterator,
     List,
     Mapping,
@@ -46,7 +47,9 @@ import spack.error
 import spack.patch
 import spack.paths
 import spack.provider_index
+import spack.spec
 import spack.tag
+import spack.traverse
 import spack.util.executable
 import spack.util.file_cache
 import spack.util.filesystem as fs
@@ -56,13 +59,13 @@ import spack.util.lock
 import spack.util.naming as nm
 import spack.util.path
 import spack.util.spack_yaml as syaml
+from spack.spec import SPECFILE_FORMAT_VERSION, Spec
 from spack.util import tty
 from spack.util.filesystem import working_dir
 from spack.util.lang import Singleton, ensure_unwrapped, memoized
 
 if TYPE_CHECKING:
     import spack.package_base
-    import spack.spec
 
 PKG_MODULE_PREFIX_V1 = "spack.pkg."
 PKG_MODULE_PREFIX_V2 = "spack_repo."
@@ -334,8 +337,6 @@ def autospec(function):
 
     @functools.wraps(function)
     def converter(self, spec_like, *args, **kwargs):
-        from spack.spec import Spec
-
         if not isinstance(spec_like, Spec):
             spec_like = Spec(spec_like)
         return function(self, spec_like, *args, **kwargs)
@@ -659,8 +660,6 @@ class RepoIndex:
         index is fresh."""
 
         # Filename of the provider index cache (we assume they're all json)
-        from spack.spec import SPECFILE_FORMAT_VERSION
-
         cache_filename = f"{name}/{self.namespace}-specfile_v{SPECFILE_FORMAT_VERSION}-index.json"
 
         with self.cache.read_transaction(cache_filename) as f:
@@ -900,7 +899,7 @@ class RepoPath:
         current_index = self.get_patch_index(allow_stale=False)
         return [current_index.patch_for_package(sha256, pkg_cls) for sha256 in sha256s]
 
-    def providers_for(self, virtual: Union[str, "spack.spec.Spec"]) -> List["spack.spec.Spec"]:
+    def providers_for(self, virtual: Union[str, spack.spec.Spec]) -> List[spack.spec.Spec]:
         all_packages = self._all_package_names_set(include_virtuals=False)
         providers = [
             spec
@@ -913,10 +912,8 @@ class RepoPath:
 
     @autospec
     def extensions_for(
-        self, extendee_spec: "spack.spec.Spec"
+        self, extendee_spec: spack.spec.Spec
     ) -> List["spack.package_base.PackageBase"]:
-        from spack.spec import Spec
-
         return [
             pkg_cls(Spec(pkg_cls.name))
             for pkg_cls in self.all_package_classes()
@@ -927,12 +924,10 @@ class RepoPath:
         """Time a package file in this repo was last updated."""
         return max(repo.last_mtime() for repo in self.repos)
 
-    def repo_for_pkg(self, spec: Union[str, "spack.spec.Spec"]) -> "Repo":
+    def repo_for_pkg(self, spec: Union[str, spack.spec.Spec]) -> "Repo":
         """Given a spec, get the repository for its package."""
         # We don't @_autospec this function b/c it's called very frequently
         # and we want to avoid parsing str's into Specs unnecessarily.
-        from spack.spec import Spec
-
         if isinstance(spec, Spec):
             namespace = spec.namespace
             name = spec.name
@@ -960,13 +955,14 @@ class RepoPath:
             raise UnknownPackageError(name)
         return selected
 
-    def get(self, spec: "spack.spec.Spec") -> "spack.package_base.PackageBase":
-        """Returns the package associated with the supplied spec."""
-        from spack.spec import Spec
-
+    def get(self, spec: spack.spec.Spec) -> "spack.package_base.PackageBase":
+        """Returns the package associated with the supplied spec, attaching it to the
+        spec if it does not have one yet."""
         msg = "RepoPath.get can only be called on concrete specs"
         assert isinstance(spec, Spec) and spec.concrete, msg
-        return self.repo_for_pkg(spec).get(spec)
+        if spec._package is None:
+            spec._package = self.repo_for_pkg(spec).get(spec)
+        return spec._package
 
     def python_paths(self) -> List[str]:
         """Return a list of all the Python paths in the repos."""
@@ -1287,10 +1283,8 @@ class Repo:
         except OSError:
             tty.die(f"Error reading {self.config_file} when opening {self.root}")
 
-    def get(self, spec: "spack.spec.Spec") -> "spack.package_base.PackageBase":
+    def get(self, spec: spack.spec.Spec) -> "spack.package_base.PackageBase":
         """Returns the package associated with the supplied spec."""
-        from spack.spec import Spec
-
         msg = "Repo.get can only be called on concrete specs"
         assert isinstance(spec, Spec) and spec.concrete, msg
         # NOTE: we only check whether the package is None here, not whether it
@@ -1316,7 +1310,7 @@ class Repo:
             raise FailedConstructorError(spec.fullname, *sys.exc_info()) from e
 
     @autospec
-    def dump_provenance(self, spec: "spack.spec.Spec", path: str) -> None:
+    def dump_provenance(self, spec: spack.spec.Spec, path: str) -> None:
         """Dump provenance information for a spec to a particular path.
 
         This dumps the package file and any associated patch files.
@@ -1336,7 +1330,7 @@ class Repo:
         # Install patch files needed by the (concrete) package.
         fs.mkdirp(path)
         if spec.concrete:
-            for patch in itertools.chain.from_iterable(spec.package.patches.values()):
+            for patch in itertools.chain.from_iterable(self.get(spec).patches.values()):
                 if patch.path:
                     if os.path.exists(patch.path):
                         fs.install(patch.path, path)
@@ -1373,7 +1367,7 @@ class Repo:
         cache validation and return a potentially stale index."""
         return self.index.get_index("patches", allow_stale=allow_stale)
 
-    def providers_for(self, virtual: Union[str, "spack.spec.Spec"]) -> List["spack.spec.Spec"]:
+    def providers_for(self, virtual: Union[str, spack.spec.Spec]) -> List[spack.spec.Spec]:
         providers = self.provider_index.providers_for(virtual)
         if not providers:
             raise UnknownPackageError(virtual if isinstance(virtual, str) else virtual.fullname)
@@ -1381,10 +1375,8 @@ class Repo:
 
     @autospec
     def extensions_for(
-        self, extendee_spec: "spack.spec.Spec"
+        self, extendee_spec: spack.spec.Spec
     ) -> List["spack.package_base.PackageBase"]:
-        from spack.spec import Spec
-
         result = [pkg_cls(Spec(pkg_cls.name)) for pkg_cls in self.all_package_classes()]
         return [x for x in result if x.extends(extendee_spec)]
 
@@ -2132,7 +2124,16 @@ def all_package_names(include_virtuals=False):
     return PATH.all_package_names(include_virtuals)
 
 
-def _is_expandable_virtual(node: "spack.spec.Spec", repo: Union[Repo, RepoPath]) -> bool:
+def attach_packages(
+    specs: Iterable[spack.spec.Spec], repository: Optional[Union[Repo, RepoPath]] = None
+) -> None:
+    """Attach a package instance to every node of the given concrete specs."""
+    repo = repository or PATH
+    for spec in spack.traverse.traverse_nodes(list(specs), key=id):
+        repo.get(spec)
+
+
+def _is_expandable_virtual(node: spack.spec.Spec, repo: Union[Repo, RepoPath]) -> bool:
     """A dependency node needs expansion if it is virtual and constrained beyond its name;
     a bare virtual name matches statelessly through edge virtuals."""
     import spack.version
@@ -2148,9 +2149,7 @@ def _is_expandable_virtual(node: "spack.spec.Spec", repo: Union[Repo, RepoPath])
     )
 
 
-def _substitute_provider(
-    node: "spack.spec.Spec", provider: "spack.spec.Spec"
-) -> "spack.spec.Spec":
+def _substitute_provider(node: spack.spec.Spec, provider: spack.spec.Spec) -> spack.spec.Spec:
     """Return a copy of the virtual ``node`` (including its dependencies) renamed to
     ``provider`` and constrained with it. The virtual's versions are dropped: they select
     providers, they do not constrain the provider's own versions.
@@ -2169,8 +2168,8 @@ def _substitute_provider(
 
 
 def expand_virtuals(
-    query: Union[str, "spack.spec.Spec"], repository: Optional[Union[Repo, RepoPath]] = None
-) -> List["spack.spec.Spec"]:
+    query: Union[str, spack.spec.Spec], repository: Optional[Union[Repo, RepoPath]] = None
+) -> List[spack.spec.Spec]:
     """Expand virtual names in an abstract query spec into provider-constrained alternatives.
 
     A spec matches the query if and only if it satisfies at least one of the returned
@@ -2183,7 +2182,6 @@ def expand_virtuals(
     empty list when a virtual in the query has no matching provider.
     """
     import spack.error
-    import spack.spec
 
     repo = repository if repository is not None else PATH
     if isinstance(query, str):
@@ -2216,8 +2214,8 @@ def expand_virtuals(
 
 
 def _providers_or_empty(
-    node: "spack.spec.Spec", repo: Union[Repo, RepoPath]
-) -> List["spack.spec.Spec"]:
+    node: spack.spec.Spec, repo: Union[Repo, RepoPath]
+) -> List[spack.spec.Spec]:
     try:
         return repo.providers_for(node)
     except UnknownPackageError:
@@ -2225,8 +2223,8 @@ def _providers_or_empty(
 
 
 def _replace_virtual_dep(
-    query: "spack.spec.Spec", name: str, provider: "spack.spec.Spec"
-) -> "spack.spec.Spec":
+    query: spack.spec.Spec, name: str, provider: spack.spec.Spec
+) -> spack.spec.Spec:
     """Return a copy of ``query`` with every dependency node called ``name`` replaced by
     ``provider``, annotating the incoming edges with the virtual name.
 
@@ -2252,16 +2250,14 @@ def _replace_virtual_dep(
 
 
 def query_matches(
-    spec: "spack.spec.Spec",
-    query: Union[str, "spack.spec.Spec"],
+    spec: spack.spec.Spec,
+    query: Union[str, spack.spec.Spec],
     repository: Optional[Union[Repo, RepoPath]] = None,
 ) -> bool:
     """Return True if ``spec`` satisfies ``query`` with virtuals expanded into providers.
 
     A literal match takes precedence: a spec named like the query matches even if the query
     name happens to be virtual in the repository."""
-    import spack.spec
-
     if isinstance(query, str):
         query = spack.spec.Spec(query)
     if spec.satisfies(query):
@@ -2272,12 +2268,10 @@ def query_matches(
     return False
 
 
-def validate_spec(spec: "spack.spec.Spec") -> None:
+def validate_spec(spec: spack.spec.Spec) -> None:
     """Checks that names and values in this spec are real. If they're not,
     it will raise an appropriate exception.
     """
-    import spack.spec
-
     # FIXME: this function should be lazy, and collect all the errors
     # FIXME: before raising the exceptions, instead of being greedy and
     # FIXME: raise just the first one encountered
@@ -2301,7 +2295,7 @@ def validate_spec(spec: "spack.spec.Spec") -> None:
             substitute_abstract_variants(node)
 
 
-def ensure_valid_variants(spec: "spack.spec.Spec") -> None:
+def ensure_valid_variants(spec: spack.spec.Spec) -> None:
     """Ensures that the variant attached to the given spec are valid.
 
     Raises:
@@ -2328,7 +2322,7 @@ def ensure_valid_variants(spec: "spack.spec.Spec") -> None:
         )
 
 
-def substitute_abstract_variants(spec: "spack.spec.Spec") -> None:
+def substitute_abstract_variants(spec: spack.spec.Spec) -> None:
     """Uses the information in ``spec.package`` to turn any variant that needs
     it into a SingleValuedVariant or BoolValuedVariant.
 
@@ -2338,7 +2332,6 @@ def substitute_abstract_variants(spec: "spack.spec.Spec") -> None:
     Args:
         spec: spec on which to operate the substitution
     """
-    import spack.spec
     import spack.util.string
     import spack.variant as vt
 
@@ -2387,7 +2380,7 @@ def substitute_abstract_variants(spec: "spack.spec.Spec") -> None:
         )
 
 
-def get_patches(spec: "spack.spec.Spec") -> List["spack.patch.Patch"]:
+def get_patches(spec: spack.spec.Spec) -> List["spack.patch.Patch"]:
     """Resolve and cache patch objects for any patch sha256 sums on the given spec.
 
     This is for use after concretization to iterate over any patches
@@ -2416,7 +2409,7 @@ def get_patches(spec: "spack.spec.Spec") -> List["spack.patch.Patch"]:
     return spec._patches
 
 
-def inject_patches_variant(root: "spack.spec.Spec") -> None:
+def inject_patches_variant(root: spack.spec.Spec) -> None:
     """Inject any patches from the packages into the ``patches`` variant of the specs
     in the given DAG, before it is marked concrete."""
     import spack.deptypes as dt
@@ -2488,7 +2481,7 @@ def inject_patches_variant(root: "spack.spec.Spec") -> None:
         )
 
 
-def reconstruct_virtuals_on_edges(spec: "spack.spec.Spec") -> None:
+def reconstruct_virtuals_on_edges(spec: spack.spec.Spec) -> None:
     """Reconstruct virtuals on edges. Used to read from old DB and reindex."""
     virtuals_needed: Dict[str, Set[str]] = {}
     virtuals_provided: Dict[str, Set[str]] = {}

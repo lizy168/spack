@@ -1933,6 +1933,8 @@ def relocate_package(spec: spack.spec.Spec) -> None:
     # that s replaced when we spliced.
     relocation_specs = specs_to_relocate(spec)
     build_spec_ids = {id(s) for s in spec.build_spec.traverse(deptype=dt.ALL & ~dt.BUILD)}
+    # splice matching requires package instances on the roots
+    spack.repo.attach_packages([spec, spec.build_spec])
     for s in relocation_specs:
         analog = s
         if id(s) not in build_spec_ids:
@@ -2170,7 +2172,7 @@ def install_root_node(
     with spack.store.filter_padding():
         tty.msg('Installing "{0}" from a buildcache'.format(spec.format()))
         extract_tarball(spec, tarball_stage, force)
-        spec.package.windows_establish_runtime_linkage()
+        spack.repo.PATH.get(spec).windows_establish_runtime_linkage()
         spack.hooks.post_install(spec, False)
         spack.store.STORE.db.add(spec, allow_missing=allow_missing)
 
