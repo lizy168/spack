@@ -1308,6 +1308,9 @@ class BaseModuleFileWriter:
             warnings.warn(message.format(self.layout))
             return
 
+        # The module context reads Spec.prefix of the spec and its run-time closure
+        spack.store.STORE.set_prefixes([self.spec])
+
         # If we are here it means it's ok to write the module file
         msg = "\tWRITE: {0} [{1}]"
         tty.debug(msg.format(self.spec.cshort_spec, self.layout.filename))

@@ -1050,6 +1050,8 @@ class OCIUploader(Uploader):
     def push(
         self, specs: List[spack.spec.Spec]
     ) -> Tuple[List[spack.spec.Spec], List[Tuple[spack.spec.Spec, BaseException]]]:
+        # Tarball creation and relocation metadata read Spec.prefix of these installed specs
+        spack.store.STORE.set_prefixes(specs)
         skipped, base_images, checksums, upload_errors = _oci_push(
             target_image=self.target_image,
             base_image=self.base_image,
@@ -1101,6 +1103,8 @@ class URLUploader(Uploader):
     def push(
         self, specs: List[spack.spec.Spec]
     ) -> Tuple[List[spack.spec.Spec], List[Tuple[spack.spec.Spec, BaseException]]]:
+        # Tarball creation and relocation metadata read Spec.prefix of these installed specs
+        spack.store.STORE.set_prefixes(specs)
         return _url_push(
             specs,
             out_url=self.url,
@@ -2163,6 +2167,9 @@ def install_root_node(
     elif spack.store.STORE.db.installed(spec) and not force:
         warnings.warn("Package for spec {0} already installed.".format(spec.format()))
         return
+
+    # Set the destination prefix so extract_tarball and relocation can read Spec.prefix
+    spack.store.STORE.set_prefixes([spec])
 
     tarball_stage = download_tarball(spec.build_spec, unsigned)
     if not tarball_stage:

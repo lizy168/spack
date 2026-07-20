@@ -16,6 +16,7 @@ import spack.fetch_strategy
 import spack.package
 import spack.package_base
 import spack.repo
+import spack.store
 from spack.paths import mock_packages_path
 from spack.spec import Spec
 from spack.util.naming import pkg_name_to_class_name
@@ -279,6 +280,7 @@ def test_rpath_args(mutable_database):
     """Test a package's rpath_args property."""
 
     rec = mutable_database.get_record("mpich")
+    spack.store.STORE.set_prefixes([rec.spec])
 
     rpath_args = spack.repo.PATH.get(rec.spec).rpath_args
     assert "-rpath" in rpath_args

@@ -13,6 +13,7 @@ import spack.main
 import spack.paths
 import spack.repo
 import spack.stage
+import spack.store
 from spack.main import SpackCommand
 from spack.util.filesystem import mkdirp
 
@@ -188,6 +189,7 @@ def test_location_view_missing(mutable_mock_env_path):
 def test_location_install_dir(mock_spec):
     """Tests spack location --install-dir."""
     spec, _ = mock_spec
+    spack.store.STORE.set_prefixes([spec])
     assert location("--install-dir", spec.name).strip() == spec.prefix
 
 

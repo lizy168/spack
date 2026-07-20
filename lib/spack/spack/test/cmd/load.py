@@ -8,6 +8,7 @@ import sys
 import pytest
 
 import spack.concretize
+import spack.store
 import spack.user_environment as uenv
 from spack.main import SpackCommand
 
@@ -50,6 +51,7 @@ def test_load_recursive(install_mockery, mock_fetch, mock_archive, mock_packages
         topo-order"""
         install("--fake", "mpileaks")
         mpileaks_spec = spack.concretize.concretize_one("mpileaks")
+        spack.store.STORE.set_prefixes([mpileaks_spec])
 
         # Ensure our reference variable is clean.
         os.environ["CMAKE_PREFIX_PATH"] = "/hello" + os.pathsep + "/world"

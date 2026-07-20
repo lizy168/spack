@@ -106,13 +106,12 @@ class BuildGraph:
         self.tests = tests
 
         with database.read_transaction():
-            # Set the install prefix for each spec based on the db record or store layout
-            for s in spack.traverse.traverse_nodes(specs):
-                _, record = database.query_by_spec_hash(s.dag_hash())
-                if record and record.path:
-                    s.set_prefix(record.path)
-                else:
-                    s.set_prefix(store.layout.path_for_spec(s))
+            # Set the install prefix on every node, including the build specs of spliced nodes,
+            # which traversal does not reach but which enter the graph as pseudo-dependencies.
+            spliced = [
+                s.build_spec for s in spack.traverse.traverse_nodes(specs) if s.build_spec is not s
+            ]
+            store.set_prefixes(list(specs) + spliced)
 
             # Build the graph and determine which specs to prune
             while stack:

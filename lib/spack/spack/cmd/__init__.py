@@ -539,6 +539,9 @@ def display_specs(specs, args=None, **kwargs):
 
     def format_list(specs):
         """Display a single list of specs, with no groups"""
+        if paths or "prefix" in format_string:
+            spack.store.STORE.set_prefixes(specs)
+
         # create the final, formatted versions of all specs
         formatted = []
         for spec in specs:
@@ -559,19 +562,16 @@ def display_specs(specs, args=None, **kwargs):
         path_fmt = "%%-%ds%%s" % (max_width + 2)
 
         out = ""
-        # getting lots of prefixes requires DB lookups. Ensure
-        # all spec.prefix calls are in one transaction.
-        with spack.store.STORE.db.read_transaction():
-            for string, spec in formatted:
-                if not string:
-                    # print newline from above
-                    out += "\n"
-                    continue
+        for string, spec in formatted:
+            if not string:
+                # print newline from above
+                out += "\n"
+                continue
 
-                if paths:
-                    out += path_fmt % (string, spec.prefix) + "\n"
-                else:
-                    out += string + "\n"
+            if paths:
+                out += path_fmt % (string, spec.prefix) + "\n"
+            else:
+                out += string + "\n"
 
         return out
 

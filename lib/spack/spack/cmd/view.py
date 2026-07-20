@@ -228,6 +228,8 @@ def view(parser, args):
         # only link commands need to disambiguate specs
         env = active_environment()
         specs = [spack.cmd.disambiguate_spec(s, env) for s in specs]
+        # The view reads Spec.prefix of these installed specs and their dependencies
+        spack.store.STORE.set_prefixes(specs)
 
     elif args.action in actions_status:
         # no specs implies all

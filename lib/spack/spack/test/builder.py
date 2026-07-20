@@ -81,6 +81,7 @@ def test_callbacks_and_installation_procedure(
 ):
     """Test the correct execution of callbacks and installation procedures for packages."""
     s = spack.concretize.concretize_one(spec_str)
+    temporary_store.set_prefixes([s])
     builder = spack.builder.create(s.package)
     for phase_fn in builder:
         phase_fn.execute()
@@ -115,6 +116,7 @@ def test_old_style_compatibility_with_super(spec_str, method_name, expected):
 @pytest.mark.disable_clean_stage_check
 def test_build_time_tests_are_executed_from_default_builder(temporary_store):
     s = spack.concretize.concretize_one("old-style-autotools")
+    temporary_store.set_prefixes([s])
     builder = spack.builder.create(s.package)
     builder.pkg.run_tests = True
     for phase_fn in builder:
@@ -159,6 +161,7 @@ def test_install_time_test_callback(
 ):
     """Confirm able to run stand-alone test as a post-install callback."""
     s = spack.concretize.concretize_one("py-test-callback")
+    temporary_store.set_prefixes([s])
     builder = spack.builder.create(s.package)
     builder.pkg.run_tests = True
     s.package.tester.test_log_file = str(tmp_path / "install_test.log")

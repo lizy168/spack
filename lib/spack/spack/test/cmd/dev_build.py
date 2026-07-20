@@ -35,6 +35,7 @@ def test_dev_build_basics(tmp_path: pathlib.Path, install_mockery):
     spec = spack.concretize.concretize_one(
         spack.spec.Spec(f"dev-build-test-install@0.0.0 dev_path={tmp_path}")
     )
+    spack.store.STORE.set_prefixes([spec])
 
     assert "dev_path" in spec.variants
 
@@ -55,6 +56,7 @@ def test_dev_build_before(tmp_path: pathlib.Path, install_mockery, installer_var
     spec = spack.concretize.concretize_one(
         spack.spec.Spec(f"dev-build-test-install@0.0.0 dev_path={tmp_path}")
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(tmp_path)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -74,6 +76,7 @@ def test_dev_build_until(tmp_path: pathlib.Path, install_mockery, last_phase, in
     spec = spack.concretize.concretize_one(
         spack.spec.Spec(f"dev-build-test-install@0.0.0 dev_path={tmp_path}")
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(tmp_path)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -93,6 +96,7 @@ def test_dev_build_before_until(tmp_path: pathlib.Path, install_mockery, install
     spec = spack.concretize.concretize_one(
         spack.spec.Spec(f"dev-build-test-install@0.0.0 dev_path={tmp_path}")
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(tmp_path)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -134,6 +138,7 @@ def test_dev_build_fails_already_installed(tmp_path: pathlib.Path, install_mocke
     spec = spack.concretize.concretize_one(
         spack.spec.Spec("dev-build-test-install@0.0.0 dev_path=%s" % str(tmp_path))
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(tmp_path)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -178,6 +183,7 @@ def test_dev_build_can_parse_path_with_at_symbol(tmp_path: pathlib.Path, install
     spec = spack.concretize.concretize_one(
         f'dev-build-test-install@0.0.0 dev_path="{special_char_dir}"'
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(special_char_dir)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -196,6 +202,7 @@ def test_dev_build_env(
     spec = spack.concretize.concretize_one(
         spack.spec.Spec("dev-build-test-install@0.0.0 dev_path=%s" % str(build_dir))
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(build_dir)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -237,6 +244,7 @@ def test_dev_build_env_with_vars(
     spec = spack.concretize.concretize_one(
         spack.spec.Spec(f"dev-build-test-install@0.0.0 dev_path={str(build_dir)}")
     )
+    spack.store.STORE.set_prefixes([spec])
 
     # store the build path in an environment variable that will be used in the environment
     monkeypatch.setenv("CUSTOM_BUILD_PATH", str(build_dir))
@@ -280,6 +288,7 @@ def test_dev_build_env_version_mismatch(
     spec = spack.concretize.concretize_one(
         spack.spec.Spec("dev-build-test-install@0.0.0 dev_path=%s" % str(tmp_path))
     )
+    spack.store.STORE.set_prefixes([spec])
 
     with fs.working_dir(str(build_dir)):
         with open(_pkg(spec).filename, "w", encoding="utf-8") as f:
@@ -367,6 +376,7 @@ spack:
             # These specs are the source of truth to compare against the installs
             leaf_spec = spack.concretize.concretize_one(leaf_spec)
             root_spec = spack.concretize.concretize_one(root_spec)
+            spack.store.STORE.set_prefixes([leaf_spec, root_spec])
 
             # Do install
             install()
@@ -419,6 +429,7 @@ spack:
             # on all specs above
             spec = spack.concretize.concretize_one(spec)
             dep_spec = spack.concretize.concretize_one(dep_spec)
+            spack.store.STORE.set_prefixes([spec, dep_spec])
             install()
 
     # Ensure that both specs installed properly
@@ -446,6 +457,7 @@ def test_dev_build_rebuild_on_source_changes(
     spec = spack.concretize.concretize_one(
         spack.spec.Spec("dev-build-test-install@0.0.0 dev_path=%s" % str(build_dir))
     )
+    spack.store.STORE.set_prefixes([spec])
 
     def reset_string():
         with fs.working_dir(str(build_dir)):

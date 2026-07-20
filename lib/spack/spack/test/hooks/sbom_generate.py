@@ -9,14 +9,22 @@ import pytest
 
 import spack.concretize
 import spack.spec
+import spack.store
 import spack.variant
 from spack.hooks.sbom_generate import generate_spdx_2_3, post_install, sbom_path
+
+
+def _concrete(spec_str: str) -> spack.spec.Spec:
+    """Concretize and set prefixes, as the installer would have before running hooks."""
+    spec = spack.concretize.concretize_one(spec_str)
+    spack.store.STORE.set_prefixes([spec])
+    return spec
 
 
 def test_sbom_generated_with_post_install(mock_packages, install_mockery):
     """SBOM is generated correctly for a trivial package."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
 
     post_install(spec)
 
@@ -44,7 +52,7 @@ def test_sbom_contains_dependencies(mock_packages, install_mockery):
     """Dependencies appear in SBOM with CONTAINS relationship."""
 
     # Use a mock package that has dependencies
-    spec = spack.concretize.concretize_one("mpileaks")
+    spec = _concrete("mpileaks")
 
     generate_spdx_2_3(spec)
 
@@ -70,7 +78,7 @@ def test_sbom_contains_dependencies(mock_packages, install_mockery):
 def test_sbom_has_document_namespace(mock_packages, install_mockery):
     """Each SBOM document has a namespace and describes the root package."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
 
     generate_spdx_2_3(spec)
 
@@ -85,7 +93,7 @@ def test_sbom_has_document_namespace(mock_packages, install_mockery):
 def test_sbom_external_package_skipped(mock_packages, install_mockery):
     """External packages should not generate SBOM."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     spec.external_path = "/fake/external/path"
 
     generate_spdx_2_3(spec)
@@ -97,7 +105,7 @@ def test_sbom_external_package_skipped(mock_packages, install_mockery):
 def test_sbom_license_and_download_defaults(mock_packages, install_mockery):
     """Default license and download fields reflect package metadata."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
 
     generate_spdx_2_3(spec)
 
@@ -115,7 +123,7 @@ def test_sbom_license_and_download_defaults(mock_packages, install_mockery):
 def test_sbom_supplier_prefers_package_supplier(mock_packages, install_mockery, monkeypatch):
     """When present, the package supplier field is used."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     monkeypatch.setattr(spec.package, "supplier", "Person: Unit Test", raising=False)
 
     generate_spdx_2_3(spec)
@@ -143,7 +151,7 @@ def test_sbom_supplier_derived_from_git_url(
 ):
     """Supplier is derived from common git URL formats when no explicit supplier is set."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     monkeypatch.setattr(spec.package, "supplier", None, raising=False)
     monkeypatch.setattr(spec.package, "git", git_url, raising=False)
 
@@ -160,7 +168,7 @@ def test_sbom_dependency_supplier_uses_dependency_package(
 ):
     """Dependency supplier data should come from the dependency package, not the root package."""
 
-    spec = spack.concretize.concretize_one("mpileaks")
+    spec = _concrete("mpileaks")
     root_pkg = spec.package
     dep = next(d for d in spec.dependencies(deptype="all") if d.name == "callpath")
 
@@ -191,7 +199,7 @@ def test_sbom_license_declared_from_package_licenses(
 ):
     """License declared comes from the package's licenses attribute (including dict forms)."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     monkeypatch.setattr(spec.package, "licenses", licenses, raising=False)
 
     generate_spdx_2_3(spec)
@@ -207,7 +215,7 @@ def test_sbom_download_location_and_checksum_from_version_metadata(
 ):
     """Checksum comes from version metadata while download location uses url_for_version."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     version = spec.version
 
     # The hook looks up version metadata by both string and Version key in different places.
@@ -229,7 +237,7 @@ def test_sbom_download_location_and_checksum_from_version_metadata(
 def test_sbom_download_location_from_git_url(mock_packages, install_mockery):
     """Download location should come from the package-level git URL."""
 
-    spec = spack.concretize.concretize_one("git-sparsepaths-version@1.0")
+    spec = _concrete("git-sparsepaths-version@1.0")
 
     generate_spdx_2_3(spec)
 
@@ -242,7 +250,7 @@ def test_sbom_download_location_from_git_url(mock_packages, install_mockery):
 def test_sbom_download_location_from_package_url(mock_packages, install_mockery, monkeypatch):
     """Download location should come from the package-level URL."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     monkeypatch.setattr(
         spec.package,
         "url",
@@ -263,7 +271,7 @@ def test_sbom_download_location_from_package_url_with_different_version(
 ):
     """Package-level URLs should respect version interpolation for the concretized version."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     monkeypatch.setattr(
         spec.package,
         "url",
@@ -287,7 +295,7 @@ def test_sbom_checksums_include_both_sha256_and_git_commit(
 ):
     """Both SHA256 from version metadata and SHA1 from commit should be included when available."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     version = spec.version
 
     # Set up version with SHA256
@@ -319,7 +327,7 @@ def test_sbom_checksums_include_both_sha256_and_git_commit(
 def test_sbom_checksums_git_commit_only(mock_packages, install_mockery, monkeypatch):
     """When only git commit is available (no SHA256), it should still be included."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     version = spec.version
 
     # Set up version without SHA256
@@ -348,7 +356,7 @@ def test_sbom_checksums_git_commit_only(mock_packages, install_mockery, monkeypa
 def test_sbom_checksums_none_available(mock_packages, install_mockery, monkeypatch):
     """When neither SHA256 nor git commit is available, checksum should be empty."""
 
-    spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spec = _concrete("trivial-install-test-package")
     version = spec.version
 
     # Set up version without SHA256
@@ -373,7 +381,7 @@ def test_sbom_dependency_entry_uses_dependency_version_and_checksum(
 ):
     """Dependency entries should use dependency-specific version and checksum data."""
 
-    spec = spack.concretize.concretize_one("mpileaks")
+    spec = _concrete("mpileaks")
     dep = next(d for d in spec.dependencies(deptype="all") if d.name == "callpath")
 
     monkeypatch.setattr(

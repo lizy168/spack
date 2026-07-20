@@ -79,6 +79,7 @@ def test_single_spec_verify_cmd(mock_packages, mock_archive, mock_fetch, install
     # Test the verify command interface to verify a single spec
     install("--fake", "libelf")
     s = spack.concretize.concretize_one("libelf")
+    spack.store.STORE.set_prefixes([s])
     prefix = s.prefix
     hash = s.dag_hash()
 
@@ -159,6 +160,7 @@ def test_verify_versions(mock_packages):
     specs = [Spec(c) for c in strs] + [Spec(f"deprecated-client@=1.1.0^{c}") for c in strs]
     for spec in specs:
         spec._mark_concrete()
+        spec.set_prefix(f"/fake/prefix/{spec.name}")
 
     msg_lines = spack.cmd.verify._verify_version(specs)
     assert "3 installed packages have unknown/deprecated" in msg_lines[0]

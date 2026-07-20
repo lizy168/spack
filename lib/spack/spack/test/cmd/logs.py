@@ -60,6 +60,7 @@ def test_logs_cmd_errors(install_mockery, mock_fetch, mock_archive, mock_package
     assert e.value.code == 2
 
     install("pkg-c")
+    spack.store.STORE.set_prefixes([spec])
     os.remove(spec.package.install_log_path)
     with pytest.raises(spack.error.SpackError, match="No logs are available"):
         logs("pkg-c")
@@ -80,6 +81,7 @@ def test_dump_logs(install_mockery, mock_fetch, mock_archive, mock_packages):
     """
     cmdline_spec = spack.spec.Spec("libelf")
     concrete_spec = spack.concretize.concretize_one(cmdline_spec)
+    spack.store.STORE.set_prefixes([concrete_spec])
 
     # Sanity check, make sure this test is checking what we want: to
     # start with

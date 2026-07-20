@@ -17,6 +17,7 @@ import spack.repo
 import spack.solver.asp
 import spack.spec
 import spack.spec_parser
+import spack.store
 import spack.util.lang
 import spack.variant
 import spack.version as vn
@@ -957,6 +958,7 @@ class TestSpecSemantics:
 
     def test_spec_formatting(self):
         spec = spack.concretize.concretize_one("multivalue-variant cflags=-O2")
+        spack.store.STORE.set_prefixes([spec])  # {prefix} formatting reads Spec.prefix
 
         # Testing named strings ie {string} and whether we get
         # the correct component

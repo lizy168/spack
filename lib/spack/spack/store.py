@@ -24,7 +24,7 @@ import re
 import shutil
 import sys
 import uuid
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, Generator, Iterable, List, Optional, Tuple, Union, cast
 
 import spack.config
 import spack.database
@@ -34,6 +34,7 @@ import spack.package_prefs
 import spack.paths
 import spack.repo
 import spack.spec
+import spack.traverse
 import spack.util.lang
 import spack.util.path
 from spack.util import filesystem as fs
@@ -213,6 +214,27 @@ class Store:
     def reindex(self) -> None:
         """Convenience function to reindex the store DB with its own layout."""
         return self.db.reindex()
+
+    def set_prefixes(self, specs: Iterable["spack.spec.Spec"]) -> None:
+        """Set the install prefix on every non-external node reachable from ``specs``.
+
+        Installed specs get the path recorded in the database (which may live in an upstream
+        or refer to a deprecated symlink), everything else gets the layout path. Prefixes are
+        always re-resolved: they are relative to *this* store, and a spec may have been stamped
+        against a different one. External specs resolve their prefix from ``external_path`` on
+        access, so they are skipped.
+        """
+        # Traverse by identity, not by hash: duplicate objects sharing a dag hash (e.g. across
+        # included concrete environments) each need their own stamp.
+        with self.db.read_transaction():
+            for s in spack.traverse.traverse_nodes(list(specs), key=id):
+                if s.external:
+                    continue
+                _, record = self.db.query_by_spec_hash(s.dag_hash())
+                if record and record.path:
+                    s.set_prefix(record.path)
+                else:
+                    s.set_prefix(self.layout.path_for_spec(s))
 
     def install_sbang(self) -> None:
         """Install the sbang script in this store's bin directory.

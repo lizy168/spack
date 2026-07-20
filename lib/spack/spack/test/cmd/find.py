@@ -278,6 +278,7 @@ mpileaks-2.3
 def test_find_format_deps_paths(database, config):
     output = find("-dp", "--format", "{name}-{version}", "mpileaks", "^zmpi")
     mpileaks = spack.concretize.concretize_one("mpileaks ^zmpi")
+    spack.store.STORE.set_prefixes([mpileaks])
     assert (
         output
         == f"""\

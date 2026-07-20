@@ -56,6 +56,7 @@ import spack.repo
 import spack.report
 import spack.rewiring
 import spack.store
+import spack.traverse
 import spack.util.filesystem as fs
 import spack.util.lock as lk
 import spack.util.path
@@ -1557,6 +1558,14 @@ class PackageInstaller:
         # List of build requests
         self.build_requests = [BuildRequest(pkg, install_args) for pkg in packages]
 
+        # Set the install prefix on every node, including the build specs of spliced nodes,
+        # which traversal does not reach.
+        roots = [br.pkg.spec for br in self.build_requests]
+        spliced = [
+            s.build_spec for s in spack.traverse.traverse_nodes(roots) if s.build_spec is not s
+        ]
+        spack.store.STORE.set_prefixes(roots + spliced)
+
         # When no reporter is configured, use NullInstallRecord to skip log file reads.
         if not create_reports:
             for br in self.build_requests:
@@ -2808,6 +2817,9 @@ def deprecate(spec: "spack.spec.Spec", deprecator: "spack.spec.Spec", link_fn) -
     # Install deprecator if it isn't installed already
     if not spack.store.STORE.db.query(deprecator):
         PackageInstaller([spack.repo.PATH.get(deprecator)], explicit=True).install()
+
+    # Set prefixes after the install above, so the deprecator resolves from its new db record
+    spack.store.STORE.set_prefixes([spec, deprecator])
 
     old_deprecator = spack.store.STORE.db.deprecator(spec)
     if old_deprecator:

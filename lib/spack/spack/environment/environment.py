@@ -912,7 +912,10 @@ class ViewDescriptor:
         with spack.store.STORE.db.read_transaction():
             result = [s for s in specs if s in self and spack.store.STORE.db.installed(s)]
 
-        return self._exclude_duplicate_runtimes(result)
+        result = self._exclude_duplicate_runtimes(result)
+        # View creation and content_hash read Spec.prefix of these installed specs
+        spack.store.STORE.set_prefixes(result)
+        return result
 
     def regenerate(self, env: "Environment") -> None:
         if self.groups is None:

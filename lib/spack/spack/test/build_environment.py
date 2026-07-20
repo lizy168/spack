@@ -19,6 +19,7 @@ import spack.config
 import spack.deptypes as dt
 import spack.package_base
 import spack.spec
+import spack.store
 import spack.util.environment
 import spack.util.module_cmd
 import spack.util.spack_yaml as syaml
@@ -465,6 +466,7 @@ dt-diamond-left:
     )
     spack.config.set("packages", cfg_data)
     top = spack.concretize.concretize_one("dt-diamond")
+    spack.store.STORE.set_prefixes([top])
 
     def _trust_me_its_a_dir(path):
         return True
@@ -492,6 +494,7 @@ def test_parallel_false_is_not_propagating(config, mock_packages):
     # |
     # b (parallel =True)
     s = spack.concretize.concretize_one("pkg-a foobar=bar")
+    spack.store.STORE.set_prefixes([s])
 
     spack.build_environment.set_package_py_globals(s.package, context=Context.BUILD)
     assert s["pkg-a"].package.module.make_jobs == 1
@@ -715,6 +718,7 @@ def test_clear_compiler_related_runtime_variables_of_build_deps(config, mock_pac
     variable changes if they are set in setup_run_environment. Spack manages those variables
     elsewhere."""
     s = spack.concretize.concretize_one("build-env-compiler-var-a")
+    spack.store.STORE.set_prefixes([s])
     ctx = spack.build_environment.SetupContext(s, context=Context.BUILD)
     result = {}
     ctx.get_env_modifications().apply_modifications(result)

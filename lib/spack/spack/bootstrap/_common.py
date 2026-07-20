@@ -59,6 +59,7 @@ def _try_import_from_store(
         query_spec += " ^" + spec_for_current_python()
 
     installed_specs = spack.store.STORE.db.query(query_spec, installed=True)
+    spack.store.STORE.set_prefixes(installed_specs)
 
     for candidate_spec in installed_specs:
         # previously bootstrapped specs may not have a python-venv dependency.
@@ -206,6 +207,7 @@ def _executables_in_store(
     msg = "[BOOTSTRAP EXECUTABLES {0}] Try installed specs with query '{1}'"
     tty.debug(msg.format(executables_str, query_spec))
     installed_specs = spack.store.STORE.db.query(query_spec, installed=True)
+    spack.store.STORE.set_prefixes(installed_specs)
     if installed_specs:
         for concrete_spec in installed_specs:
             bin_dir = concrete_spec.prefix.bin

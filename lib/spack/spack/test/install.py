@@ -280,6 +280,7 @@ def test_installed_upstream(install_upstream, mock_fetch):
 
         new_dependency = dependent["dependency-install"]
         assert spack.store.STORE.db.installed_upstream(new_dependency)
+        spack.store.STORE.set_prefixes([dependent])
         assert new_dependency.prefix == upstream_layout.path_for_spec(dependency)
 
         PackageInstaller([dependent.package], explicit=True).install()
@@ -430,6 +431,7 @@ def test_pkg_build_paths(install_mockery):
 def test_pkg_install_paths(install_mockery):
     # Get a basic concrete spec for the trivial install package.
     spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spack.store.STORE.set_prefixes([spec])
 
     log_path = os.path.join(spec.prefix, ".spack", _spack_build_logfile + ".gz")
     assert spec.package.install_log_path == log_path
@@ -467,6 +469,7 @@ def test_log_install_without_build_files(install_mockery):
     """Test the installer log function when no build files are present."""
     # Get a basic concrete spec for the trivial install package.
     spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spack.store.STORE.set_prefixes([spec])
 
     # Attempt installing log without the build log file
     with pytest.raises(OSError, match="No such file or directory"):
@@ -489,6 +492,7 @@ def test_log_install_with_build_files(install_mockery, monkeypatch):
     monkeypatch.setattr(fs, "install", _install)
 
     spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spack.store.STORE.set_prefixes([spec])
 
     # Set up mock build files and try again to include archive failure
     log_path = spec.package.log_path
@@ -578,6 +582,7 @@ def test_install_from_binary_with_missing_patch_succeeds(
     s_dict["spec"]["nodes"][0]["patches"] = patches
     s_dict["spec"]["nodes"][0]["parameters"]["patches"] = patches
     s = Spec.from_dict(s_dict)
+    temporary_store.set_prefixes([s])
 
     # Create an install dir for it
     os.makedirs(os.path.join(s.prefix, ".spack"))

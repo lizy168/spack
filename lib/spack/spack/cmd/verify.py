@@ -95,6 +95,7 @@ def verify_versions(args):
     3. Installed package version deprecated in the package recipe
     """
     specs = args.specs(installed=True)
+    spack.store.STORE.set_prefixes(specs)
 
     msg_lines = _verify_version(specs)
     if msg_lines:
@@ -146,6 +147,7 @@ def _verify_version(specs):
 def verify_libraries(args):
     """verify that shared libraries of install packages can be located in rpaths (Linux only)"""
     specs_from_db = [s for s in args.specs(installed=True) if not s.external]
+    spack.store.STORE.set_prefixes(specs_from_db)
 
     tty.info(f"Checking {len(specs_from_db)} packages for shared library resolution")
 
@@ -220,6 +222,7 @@ def verify_manifest(args):
     else:
         args.subparser.error("use --all or specify specs to verify")
 
+    spack.store.STORE.set_prefixes(specs)
     for spec in specs:
         tty.debug("Verifying package %s")
         results = spack.verify.check_spec_manifest(spec)

@@ -645,6 +645,8 @@ def copy_stage_logs_to_artifacts(job_spec: spack.spec.Spec, job_log_dir: str) ->
         tty.warn("Cannot copy artifacts for non-concrete specs")
         return
 
+    # The metadata dir lives under Spec.prefix
+    spack.store.STORE.set_prefixes([job_spec])
     package_metadata_root = pathlib.Path(spack.store.STORE.layout.metadata_path(job_spec))
     if not os.path.isdir(package_metadata_root):
         # Fallback to using the stage directory

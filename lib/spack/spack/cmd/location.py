@@ -11,6 +11,7 @@ import spack.environment as ev
 import spack.paths
 import spack.repo
 import spack.stage
+import spack.store
 from spack.active_environment import active_environment
 from spack.cmd.common import arguments
 from spack.util import tty
@@ -167,6 +168,7 @@ def location(parser, args):
     if args.install_dir:
         env = active_environment()
         spec = spack.cmd.disambiguate_spec(specs[0], env, first=args.find_first)
+        spack.store.STORE.set_prefixes([spec])
         print(spec.prefix)
         return
 

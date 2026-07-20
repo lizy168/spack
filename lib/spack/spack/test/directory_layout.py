@@ -97,6 +97,7 @@ def test_read_and_write_spec(temporary_store, config, mock_packages):
         except Exception:
             continue
 
+        spec.set_prefix(layout.path_for_spec(spec))
         layout.create_install_directory(spec)
 
         install_dir = path_to_os_path(layout.path_for_spec(spec))[0]
@@ -205,6 +206,7 @@ def test_find(temporary_store, config, mock_packages):
             continue
         spec = spack.concretize.concretize_one(name)
         installed_specs[spec.name] = spec
+        spec.set_prefix(layout.path_for_spec(spec))
         layout.create_install_directory(spec)
 
     # Make sure all the installed specs appear in
@@ -219,5 +221,6 @@ def test_yaml_directory_layout_build_path(tmp_path: pathlib.Path, config, mock_p
     """This tests build path method."""
     spec = spack.concretize.concretize_one("python")
     layout = DirectoryLayout(str(tmp_path))
+    spec.set_prefix(layout.path_for_spec(spec))
     rel_path = os.path.join(layout.metadata_dir, layout.packages_dir)
     assert layout.build_packages_path(spec) == os.path.join(spec.prefix, rel_path)

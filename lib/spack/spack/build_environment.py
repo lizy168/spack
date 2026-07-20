@@ -767,6 +767,12 @@ def setup_package(pkg, dirty, context: Context = Context.BUILD):
     if context not in (Context.BUILD, Context.TEST):
         raise ValueError(f"'context' must be Context.BUILD or Context.TEST - got {context}")
 
+    # The setup routines below read Spec.prefix throughout the DAG. In a build process the
+    # installer has already set the prefixes (possibly deliberately overriding the store
+    # resolution, hence no re-resolution here); direct callers get them from the store.
+    if pkg.spec._prefix is None:
+        spack.store.STORE.set_prefixes([pkg.spec])
+
     # First populate the package.py's module with the relevant globals that could be used in any
     # of the setup_* functions.
     setup_context = SetupContext(pkg.spec, context=context)

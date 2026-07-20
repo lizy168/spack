@@ -152,6 +152,7 @@ def test_install_from_cache_errors(install_mockery):
 def test_install_from_cache_ok(install_mockery, monkeypatch):
     """Test to ensure cover _install_from_cache to the return."""
     spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spack.store.STORE.set_prefixes([spec])
     monkeypatch.setattr(inst, "_try_install_from_binary_cache", _true)
     monkeypatch.setattr(spack.hooks, "post_install", _noop)
 
@@ -421,6 +422,7 @@ def test_package_id_ok(install_mockery):
 
 def test_fake_install(install_mockery):
     spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spack.store.STORE.set_prefixes([spec])
     assert spec.concrete
 
     pkg = spec.package
@@ -433,6 +435,7 @@ def test_dump_packages_deps_ok(install_mockery, tmp_path: pathlib.Path, mock_pac
 
     spec_name = "simple-inheritance"
     spec = spack.concretize.concretize_one(spec_name)
+    spack.store.STORE.set_prefixes([spec])
     inst.dump_packages(spec, str(tmp_path))
 
     repo = mock_packages.repos[0]
@@ -464,6 +467,7 @@ def test_dump_packages_deps_errs(install_mockery, tmp_path: pathlib.Path, monkey
     monkeypatch.setattr(spack.store.STORE.layout, "build_packages_path", bpp_path)
 
     spec = spack.concretize.concretize_one("simple-inheritance")
+    spack.store.STORE.set_prefixes([spec])
     path = str(tmp_path)
 
     # The call to install_tree will raise the exception since not mocking
@@ -828,6 +832,7 @@ def test_setup_install_dir_grp(install_mockery, monkeypatch, capfd):
         spack.concretize.concretize_one("trivial-install-test-package").package
     )
     spec = build_task.request.pkg.spec
+    spack.store.STORE.set_prefixes([spec])
 
     fs.touchp(spec.prefix)
     metadatadir = spack.store.STORE.layout.metadata_path(spec)
@@ -1312,6 +1317,7 @@ def test_print_install_test_log_failures(
     """Confirm expected outputs when there are test failures."""
     name = "trivial-install-test-package"
     s = spack.concretize.concretize_one(name)
+    spack.store.STORE.set_prefixes([s])
     pkg = s.package
 
     # Missing test log is an error

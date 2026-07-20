@@ -17,6 +17,7 @@ import spack.modules.error
 import spack.modules.lmod
 import spack.repo
 import spack.spec
+import spack.store
 import spack.util.environment
 
 mpich_spec_string = "mpich@3.0.4"
@@ -470,6 +471,7 @@ class TestLmod:
             install("--fake", "--add", "cmake")
 
             spec = spack.concretize.concretize_one("cmake")
+            spack.store.STORE.set_prefixes([spec])
 
             content = modulefile_content("cmake")
             expected = e.default_view.get_projection_for_spec(spec)

@@ -203,6 +203,7 @@ def test_install_with_source(
     """Verify that source has been copied into place."""
     install("--source", "--keep-stage", "trivial-install-test-package")
     spec = spack.concretize.concretize_one("trivial-install-test-package")
+    spack.store.STORE.set_prefixes([spec])
     src = os.path.join(spec.prefix.share, "trivial-install-test-package", "src")
     assert filecmp.cmp(
         os.path.join(mock_archive.path, "configure"), os.path.join(src, "configure")
@@ -213,6 +214,7 @@ def test_install_env_variables(
     mock_packages, mock_archive, mock_fetch, install_mockery, installer_variant
 ):
     spec = spack.concretize.concretize_one("pkg-c")
+    spack.store.STORE.set_prefixes([spec])
     install("pkg-c")
     assert os.path.isfile(spec.package.install_env_path)
 
@@ -235,6 +237,7 @@ def test_install_overwrite(
 ):
     """Tests installing a spec, and then re-installing it in the same prefix."""
     spec = spack.concretize.concretize_one("pkg-c")
+    spack.store.STORE.set_prefixes([spec])
     install("pkg-c")
 
     # Ignore manifest, install times, and sbom
@@ -273,6 +276,7 @@ def test_install_overwrite_not_installed(
 ):
     """Tests that overwrite doesn't fail if the package is not installed"""
     spec = spack.concretize.concretize_one("pkg-c")
+    spack.store.STORE.set_prefixes([spec])
     assert not os.path.exists(spec.prefix)
     install("--overwrite", "-y", "pkg-c")
     assert os.path.exists(spec.prefix)
@@ -308,6 +312,7 @@ def test_install_overwrite_multiple(
     # Try to install a spec and then to reinstall it.
     libdwarf = spack.concretize.concretize_one("libdwarf")
     cmake = spack.concretize.concretize_one("cmake")
+    spack.store.STORE.set_prefixes([libdwarf, cmake])
 
     install("--fake", "libdwarf")
     install("--fake", "cmake")
@@ -527,6 +532,7 @@ def test_extra_files_are_archived(
     mock_packages, mock_archive, mock_fetch, install_mockery, installer_variant
 ):
     s = spack.concretize.concretize_one("archive-files")
+    spack.store.STORE.set_prefixes([s])
 
     install("archive-files")
 
@@ -730,6 +736,7 @@ def test_cache_only_fails(mock_fetch, install_mockery, installer_variant):
 def test_install_only_dependencies(mock_fetch, install_mockery, installer_variant):
     dep = spack.concretize.concretize_one("dependency-install")
     root = spack.concretize.concretize_one("dependent-install")
+    spack.store.STORE.set_prefixes([dep, root])
 
     install("--only", "dependencies", "dependent-install")
 
@@ -751,6 +758,7 @@ def test_install_only_package(mock_fetch, install_mockery):
 def test_install_deps_then_package(mock_fetch, install_mockery, installer_variant):
     dep = spack.concretize.concretize_one("dependency-install")
     root = spack.concretize.concretize_one("dependent-install")
+    spack.store.STORE.set_prefixes([dep, root])
 
     install("--only", "dependencies", "dependent-install")
     assert os.path.exists(dep.prefix)
@@ -771,6 +779,7 @@ def test_install_only_dependencies_in_env(
     with ev.read("test"):
         dep = spack.concretize.concretize_one("dependency-install")
         root = spack.concretize.concretize_one("dependent-install")
+        spack.store.STORE.set_prefixes([dep, root])
 
         install("-v", "--only", "dependencies", "--add", "dependent-install")
 
@@ -790,6 +799,7 @@ def test_install_only_dependencies_of_all_in_env(
             spack.concretize.concretize_one("dependent-install@1.0"),
             spack.concretize.concretize_one("dependent-install@2.0"),
         ]
+        spack.store.STORE.set_prefixes(roots)
 
         add("dependent-install@1.0")
         add("dependent-install@2.0")
@@ -995,6 +1005,7 @@ def test_install_env_with_tests_all(
     env("create", "test")
     with ev.read("test"):
         test_dep = spack.concretize.concretize_one("test-dependency")
+        spack.store.STORE.set_prefixes([test_dep])
         add("depb")
         install("--fake", "--test", "all")
         assert os.path.exists(test_dep.prefix)
@@ -1008,6 +1019,7 @@ def test_install_env_with_tests_root(
     env("create", "test")
     with ev.read("test"):
         test_dep = spack.concretize.concretize_one("test-dependency")
+        spack.store.STORE.set_prefixes([test_dep])
         add("depb")
         install("--fake", "--test", "root")
         assert not os.path.exists(test_dep.prefix)

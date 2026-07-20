@@ -877,6 +877,10 @@ class TestSuite:
         timeout: Optional[int] = None,
     ):
         self.write_reproducibility_data()
+
+        # Test code reads Spec.prefix of the spec under test and its dependencies
+        spack.store.STORE.set_prefixes(self.specs)
+
         for spec in self.specs:
             # Setup cdash/junit/etc reports
             report = spack.report.RequestRecord(spec)

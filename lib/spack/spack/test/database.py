@@ -222,12 +222,9 @@ def test_add_to_upstream_after_downstream(upstream_and_downstream_db, repo_build
         qresults = downstream_db.query("x")
         assert len(qresults) == 1
         (queried_spec,) = qresults
-        try:
-            orig_db = spack.store.STORE.db
-            spack.store.STORE.db = downstream_db
-            assert queried_spec.prefix == downstream_db.layout.path_for_spec(spec)
-        finally:
-            spack.store.STORE.db = orig_db
+        _, record = downstream_db.query_by_spec_hash(spec.dag_hash())
+        queried_spec.set_prefix(record.path)
+        assert queried_spec.prefix == downstream_db.layout.path_for_spec(spec)
 
 
 def test_cannot_write_upstream(tmp_path: pathlib.Path, mock_packages, config):
@@ -427,6 +424,7 @@ def test_default_queries(database):
 
     spec = rec.spec
     spack.repo.attach_packages([spec])
+    spack.store.STORE.set_prefixes([spec])
 
     libraries = spec["zmpi"].libs
     assert len(libraries) == 1
@@ -447,6 +445,7 @@ def test_default_queries(database):
 
     spec = rec.spec
     spack.repo.attach_packages([spec])
+    spack.store.STORE.set_prefixes([spec])
 
     libraries = spec["libelf"].libs
     assert len(libraries) == 1
@@ -1092,7 +1091,9 @@ def test_reindex_removed_prefix_is_not_installed(mutable_database, mock_store, c
     not installed."""
 
     # Remove libelf from the filesystem
-    prefix = mutable_database.query_one("libelf").prefix
+    libelf = mutable_database.query_one("libelf")
+    spack.store.STORE.set_prefixes([libelf])
+    prefix = libelf.prefix
     assert prefix.startswith(str(mock_store))
     shutil.rmtree(prefix)
 
@@ -1113,7 +1114,9 @@ def test_reindex_removed_prefix_is_not_installed(mutable_database, mock_store, c
 
 def test_reindex_when_all_prefixes_are_removed(mutable_database, mock_store):
     # Remove all non-external installations from the filesystem
-    for spec in spack.store.STORE.db.query_local():
+    local_specs = spack.store.STORE.db.query_local()
+    spack.store.STORE.set_prefixes(local_specs)
+    for spec in local_specs:
         if not spec.external:
             assert spec.prefix.startswith(str(mock_store))
             shutil.rmtree(spec.prefix)

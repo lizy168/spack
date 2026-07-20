@@ -118,6 +118,7 @@ def dev_build(self, args):
     spec = spack.concretize.concretize_one(spec)
 
     if spack.store.STORE.db.installed(spec):
+        spack.store.STORE.set_prefixes([spec])
         tty.error("Already installed in %s" % spec.prefix)
         tty.msg("Uninstall or try adding a version suffix for this dev build.")
         sys.exit(1)

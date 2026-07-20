@@ -8,6 +8,7 @@ import sys
 
 import spack.concretize
 import spack.paths
+import spack.store
 import spack.util.executable
 from spack.util.path import convert_to_posix_path
 
@@ -66,6 +67,7 @@ def make_installer(parser, args):
     if sys.platform == "win32":
         output_dir = args.output_dir
         cmake_spec = spack.concretize.concretize_one("cmake")
+        spack.store.STORE.set_prefixes([cmake_spec])
         cmake_path = os.path.join(cmake_spec.prefix, "bin", "cmake.exe")
         cpack_path = os.path.join(cmake_spec.prefix, "bin", "cpack.exe")
         spack_source = args.spack_source

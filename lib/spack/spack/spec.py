@@ -1271,14 +1271,19 @@ class ForwardQueryToPackage:
                 # A callback can return None to trigger an error indicating
                 # that the query failed.
                 if value is None:
+                    try:
+                        prefix = str(instance.prefix)
+                    except spack.error.SpecError:
+                        prefix = "<unset>"
                     msg = "Query of package '{name}' for '{attrib}' failed\n"
-                    msg += "\tprefix : {spec.prefix}\n"
+                    msg += "\tprefix : {prefix}\n"
                     msg += "\tspec : {spec}\n"
                     msg += "\tqueried as : {query.name}\n"
                     msg += "\textra parameters : {query.extra_parameters}"
                     message = msg.format(
                         name=pkg.name,
                         attrib=self.attribute_name,
+                        prefix=prefix,
                         spec=instance,
                         query=instance.last_query,
                     )
@@ -2224,13 +2229,15 @@ class Spec:
             raise spack.error.SpecError(f"Spec is not concrete: {self}")
 
         if self._prefix is None:
-            from spack.store import STORE
-
-            _, record = STORE.db.query_by_spec_hash(self.dag_hash())
-            if record and record.path:
-                self.set_prefix(record.path)
+            if self.external:
+                # An external spec records its prefix on the spec itself
+                self.set_prefix(self.external_path)
             else:
-                self.set_prefix(STORE.layout.path_for_spec(self))
+                raise spack.error.SpecError(
+                    f"cannot determine the prefix of {self.short_spec}: its install prefix has "
+                    "not been set. The prefix of a non-external spec is set from its store, "
+                    "typically with Store.set_prefixes, by the sub-system that consumes it."
+                )
         assert self._prefix is not None
         return self._prefix
 

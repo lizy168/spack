@@ -2169,6 +2169,9 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
 
     @staticmethod
     def uninstall_by_spec(spec, force=False, deprecator=None):
+        # The prefix checks below, the uninstall hooks, and the removal of the install
+        # directory all read Spec.prefix
+        spack.store.STORE.set_prefixes([spec])
         if not os.path.isdir(spec.prefix):
             # prefix may not exist, but DB may be inconsistent. Try to fix by
             # removing, but omit hooks.

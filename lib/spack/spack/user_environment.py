@@ -8,6 +8,7 @@ import sys
 import spack.build_environment
 import spack.config
 import spack.spec
+import spack.store
 from spack import traverse
 from spack.enums import Context
 from spack.util import environment
@@ -98,6 +99,9 @@ def environment_modifications_for_specs(
     topo_ordered = list(
         traverse.traverse_nodes(specs, root=True, deptype=("run", "link"), order="topo")
     )
+
+    # Both the prefix inspections and setup_run_environment read Spec.prefix
+    spack.store.STORE.set_prefixes(topo_ordered)
 
     # Static environment changes (prefix inspections)
     for s in reversed(topo_ordered):

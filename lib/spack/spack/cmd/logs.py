@@ -36,6 +36,7 @@ def _dump_byte_stream_to_stdout(instream: io.BufferedIOBase) -> None:
 def _logs(cmdline_spec: spack.spec.Spec, concrete_spec: spack.spec.Spec):
     pkg = spack.repo.PATH.get(concrete_spec)
     if spack.store.STORE.db.installed(concrete_spec):
+        spack.store.STORE.set_prefixes([concrete_spec])
         log_path = pkg.install_log_path
     elif os.path.exists(pkg.stage.path):
         # TODO: `spack logs` can currently not show the logs while a package is being built, as the

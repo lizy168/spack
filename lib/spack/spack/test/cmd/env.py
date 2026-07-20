@@ -3669,6 +3669,7 @@ spack:
 """
     ) as e:
         specs = e.all_specs()
+        spack.store.STORE.set_prefixes(specs)
         for module_set in ("uses_view", "without_view"):
             modules = glob.glob(f"{e.path}/{module_set}/**/*/*")
             assert len(modules) == len(specs), "Not all modules were generated"
